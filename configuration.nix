@@ -19,6 +19,7 @@
   # ZFS is most reliable with the default, supported kernel.
   boot.kernelPackages = pkgs.linuxPackages;
   boot.supportedFilesystems = [ "zfs" ];
+  boot.zfs.forceImportRoot = false;
   boot.zfs.extraPools = [ "myraid" ];
 
   networking.hostName = "nixos"; # Define your hostname.
