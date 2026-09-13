@@ -16,10 +16,13 @@
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
-  # Use latest kernel.
-  boot.kernelPackages = pkgs.linuxPackages_latest;
+  # ZFS is most reliable with the default, supported kernel.
+  boot.kernelPackages = pkgs.linuxPackages;
+  boot.supportedFilesystems = [ "zfs" ];
+  boot.zfs.extraPools = [ "myraid" ];
 
   networking.hostName = "nixos"; # Define your hostname.
+  networking.hostId = "1b6caf20";
   # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
 
   # Configure network proxy if necessary
