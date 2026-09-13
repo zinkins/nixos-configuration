@@ -20,7 +20,6 @@
   boot.kernelPackages = pkgs.linuxPackages;
   boot.supportedFilesystems = [ "zfs" ];
   boot.zfs.forceImportRoot = false;
-  boot.zfs.extraPools = [ "myraid" ];
 
   networking.hostName = "nixos"; # Define your hostname.
   networking.hostId = "1b6caf20";
