@@ -54,7 +54,7 @@
   ];
 
   users.users.sergey.openssh.authorizedKeys.keys = [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINVUqy0zMWu1vlbuDzRZyaqDpc4LwNRHfC6Q0PaDSIUg serge@SERGEY-PC"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID8bCJ+tKxqwFbH+fAC1bYZMvIoXsM9qldCUehl7m00O serge@SERGEY-PC"
   ];
 
   services.openssh = {
