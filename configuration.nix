@@ -46,6 +46,10 @@
   };
 
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  environment.systemPackages = with pkgs; [
+    git
+    htop    
+  ];
 
   # Configure keymap in X11
   services.xserver.xkb = {
