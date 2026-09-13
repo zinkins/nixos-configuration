@@ -20,6 +20,7 @@
   boot.kernelPackages = pkgs.linuxPackages;
   boot.supportedFilesystems = [ "zfs" ];
   boot.zfs.forceImportRoot = false;
+  boot.zfs.extraPools = [ "myraid1" ];
 
   networking.hostName = "nixos"; # Define your hostname.
   networking.hostId = "1b6caf20";
@@ -53,7 +54,7 @@
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
   environment.systemPackages = with pkgs; [
     git
-    htop    
+    htop
   ];
 
   users.users.sergey.openssh.authorizedKeys.keys = [
