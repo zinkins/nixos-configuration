@@ -10,6 +10,7 @@
       ./hardware-configuration.nix
       ./packages.nix
       ./networking.nix
+      ./dlna.nix
     ];
 
   # Use the systemd-boot EFI boot loader.
