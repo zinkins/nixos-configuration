@@ -12,7 +12,7 @@
     tree
 
     # AI assistants
-    chatgpt-cli
+    codex
     claude-code
   ];
 }
