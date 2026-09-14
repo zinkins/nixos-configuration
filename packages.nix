@@ -10,5 +10,9 @@
     ripgrep
     jq
     tree
+
+    # AI assistants
+    chatgpt-cli
+    claude-code
   ];
 }
