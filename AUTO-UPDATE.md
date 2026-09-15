@@ -26,8 +26,10 @@ For each run the updater:
 6. refuses non-fast-forward/diverged history;
 7. runs `git pull --ff-only`;
 8. runs a full `nixos-rebuild build --flake /etc/nixos#nixos`;
-9. runs `nixos-rebuild dry-activate --flake /etc/nixos#nixos`;
-10. only if both preflight steps succeed, runs `nixos-rebuild switch --flake /etc/nixos#nixos`.
+9. runs `nixos-rebuild dry-activate --flake /etc/nixos#nixos` as root;
+10. only if both preflight steps succeed, runs `nixos-rebuild switch --flake /etc/nixos#nixos` as root.
+
+The systemd service itself runs as root, so its `dry-activate` and `switch` steps do not require interactive authentication.
 
 If the build or dry activation fails, the checkout is reset to the previous revision and the running system is left unchanged.
 
@@ -51,6 +53,25 @@ sudo nixos-rebuild switch --flake /etc/nixos#nixos
 ```
 
 After that the timer handles later changes automatically.
+
+## Manual preflight check
+
+To reproduce the updater checks manually, use:
+
+```bash
+(cd /var/tmp && nixos-rebuild build --flake /etc/nixos#nixos)
+sudo nixos-rebuild dry-activate --flake /etc/nixos#nixos
+```
+
+`build` does not require root privileges. It creates a `result` symlink in the current working directory, so the example runs it from `/var/tmp` instead of `/etc/nixos`. The repository also ignores standard Nix build-result links (`result` and `result-*`) as an additional safeguard.
+
+`dry-activate` does require root privileges: on NixOS 26.05 it invokes `switch-to-configuration` through `systemd-run`, which requires administrative privileges. Running `dry-activate` without `sudo` can fail with an `interactive authentication` / `Access denied` error even when the configuration itself is valid.
+
+To apply the configuration manually after a successful preflight:
+
+```bash
+sudo nixos-rebuild switch --flake /etc/nixos#nixos
+```
 
 ## Check status
 
@@ -87,7 +108,15 @@ Inspect the changes with:
 git -C /etc/nixos status
 ```
 
-Commit, stash, or remove them before starting the updater again.
+If the only untracked item is a `result` symlink left by a manual `nixos-rebuild build` run from `/etc/nixos`, it is safe to remove:
+
+```bash
+rm -f /etc/nixos/result
+```
+
+Then rerun `git -C /etc/nixos status`. After the `.gitignore` change in this repository is present locally, normal `result` and `result-*` build links no longer make the checkout dirty.
+
+Commit, stash, or remove any other local changes before starting the updater again.
 
 ## Security note
 
