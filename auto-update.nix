@@ -58,7 +58,9 @@ let
     old_rev="$(git_cmd rev-parse HEAD)"
     echo "Current configuration revision: $old_rev"
 
-    git_cmd fetch --prune origin "$branch"
+    # Fetch all configured origin refs so refs/remotes/origin/master is
+    # guaranteed to represent the commit we compare and later pull.
+    git_cmd fetch --prune origin
     remote_rev="$(git_cmd rev-parse "refs/remotes/origin/$branch")"
 
     if [ "$old_rev" = "$remote_rev" ]; then
