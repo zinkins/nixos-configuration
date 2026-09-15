@@ -136,7 +136,7 @@ in
       ProtectKernelTunables = true;
       ProtectKernelModules = true;
       ProtectControlGroups = true;
-      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_NETLINK" ];
     };
   };
 }
