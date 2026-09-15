@@ -26,8 +26,10 @@ For each run the updater:
 6. refuses non-fast-forward/diverged history;
 7. runs `git pull --ff-only`;
 8. runs a full `nixos-rebuild build --flake /etc/nixos#nixos`;
-9. runs `nixos-rebuild dry-activate --flake /etc/nixos#nixos`;
-10. only if both preflight steps succeed, runs `nixos-rebuild switch --flake /etc/nixos#nixos`.
+9. runs `nixos-rebuild dry-activate --flake /etc/nixos#nixos` as root;
+10. only if both preflight steps succeed, runs `nixos-rebuild switch --flake /etc/nixos#nixos` as root.
+
+The systemd service itself runs as root, so its `dry-activate` and `switch` steps do not require interactive authentication.
 
 If the build or dry activation fails, the checkout is reset to the previous revision and the running system is left unchanged.
 
@@ -51,6 +53,23 @@ sudo nixos-rebuild switch --flake /etc/nixos#nixos
 ```
 
 After that the timer handles later changes automatically.
+
+## Manual preflight check
+
+To reproduce the updater checks manually, use:
+
+```bash
+nixos-rebuild build --flake /etc/nixos#nixos
+sudo nixos-rebuild dry-activate --flake /etc/nixos#nixos
+```
+
+`build` does not require root privileges. `dry-activate` does: on NixOS 26.05 it invokes `switch-to-configuration` through `systemd-run`, which requires administrative privileges. Running `dry-activate` without `sudo` can fail with an `interactive authentication` / `Access denied` error even when the configuration itself is valid.
+
+To apply the configuration manually after a successful preflight:
+
+```bash
+sudo nixos-rebuild switch --flake /etc/nixos#nixos
+```
 
 ## Check status
 
