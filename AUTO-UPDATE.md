@@ -59,11 +59,13 @@ After that the timer handles later changes automatically.
 To reproduce the updater checks manually, use:
 
 ```bash
-nixos-rebuild build --flake /etc/nixos#nixos
+(cd /var/tmp && nixos-rebuild build --flake /etc/nixos#nixos)
 sudo nixos-rebuild dry-activate --flake /etc/nixos#nixos
 ```
 
-`build` does not require root privileges. `dry-activate` does: on NixOS 26.05 it invokes `switch-to-configuration` through `systemd-run`, which requires administrative privileges. Running `dry-activate` without `sudo` can fail with an `interactive authentication` / `Access denied` error even when the configuration itself is valid.
+`build` does not require root privileges. It creates a `result` symlink in the current working directory, so the example runs it from `/var/tmp` instead of `/etc/nixos`. The repository also ignores standard Nix build-result links (`result` and `result-*`) as an additional safeguard.
+
+`dry-activate` does require root privileges: on NixOS 26.05 it invokes `switch-to-configuration` through `systemd-run`, which requires administrative privileges. Running `dry-activate` without `sudo` can fail with an `interactive authentication` / `Access denied` error even when the configuration itself is valid.
 
 To apply the configuration manually after a successful preflight:
 
@@ -106,7 +108,15 @@ Inspect the changes with:
 git -C /etc/nixos status
 ```
 
-Commit, stash, or remove them before starting the updater again.
+If the only untracked item is a `result` symlink left by a manual `nixos-rebuild build` run from `/etc/nixos`, it is safe to remove:
+
+```bash
+rm -f /etc/nixos/result
+```
+
+Then rerun `git -C /etc/nixos status`. After the `.gitignore` change in this repository is present locally, normal `result` and `result-*` build links no longer make the checkout dirty.
+
+Commit, stash, or remove any other local changes before starting the updater again.
 
 ## Security note
 
