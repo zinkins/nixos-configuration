@@ -11,6 +11,7 @@
       ./packages.nix
       ./networking.nix
       ./media.nix
+      ./reverse-proxy.nix
       ./auto-update.nix
     ];
 
