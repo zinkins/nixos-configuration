@@ -197,7 +197,7 @@ in
       users = [ "sergey" ];
       commands = [
         {
-          command = aiVpnExec;
+          command = "${aiVpnExec}";
           options = [ "NOPASSWD" ];
         }
       ];
