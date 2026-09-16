@@ -14,11 +14,11 @@ Inside that namespace:
 - IPv6 is disabled;
 - all IPv4 forwarding is policy-routed through routing table `51820`, whose default route is `awg0`;
 - NAT is allowed only when the outgoing interface is `awg0`;
-- a final forwarding `REJECT` rule blocks fallback to the server's normal Internet interface.
+- a kill-switch rule is inserted at the beginning of the host `FORWARD` chain and rejects any packet from the AI namespace whose outgoing interface is not `awg0`.
 
 This is deliberately stronger than setting `HTTP_PROXY` or `HTTPS_PROXY`: child processes started by the agents (`git`, `curl`, package managers, MCP processes, and so on) inherit the same network namespace. A process that ignores proxy environment variables still cannot bypass the VPN.
 
-If `amneziawg.service`, interface `awg0`, or the VPN default route is unavailable, the wrappers refuse to start. If the tunnel disappears after a CLI has started, the NAT/firewall kill switch prevents fallback to the normal route.
+If `amneziawg.service`, interface `awg0`, or the VPN default route is unavailable, the wrappers refuse to start. If the tunnel disappears after a CLI has started, the firewall rule is evaluated before generic `ESTABLISHED,RELATED` forwarding, so an already-open connection cannot fall back to the normal ISP interface.
 
 ## Commands
 
