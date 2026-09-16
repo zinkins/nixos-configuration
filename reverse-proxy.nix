@@ -1,8 +1,8 @@
 { lib, pkgs, ... }:
 
 let
-  localDomain = "home.arpa";
-  dnsmasqRuntimeConfig = "/run/dnsmasq-home-arpa.conf";
+  localDomain = "home";
+  dnsmasqRuntimeConfig = "/run/dnsmasq-home.conf";
 in
 {
   # Handy for checking the local DNS service with `dig` and `nslookup`.
@@ -34,7 +34,7 @@ in
     };
   };
 
-  # Local DNS for *.home.arpa. The server may get its LAN address through DHCP,
+  # Local DNS for *.home. The server may get its LAN address through DHCP,
   # so the A records are generated at service start from the interface carrying
   # the IPv4 default route instead of hard-coding an address in Git.
   services.dnsmasq = {
