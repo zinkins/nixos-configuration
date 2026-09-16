@@ -11,6 +11,9 @@
       ./packages.nix
       ./networking.nix
       ./media.nix
+      ./adguard.nix
+      ./reverse-proxy.nix
+      ./ai-vpn.nix
       ./auto-update.nix
     ];
 
@@ -117,7 +120,7 @@
   # system.copySystemConfiguration = true;
 
   # This option defines the first version of NixOS you have installed on this particular machine,
-  # and is used to maintain compatibility with application data (e.g. databases) created by this particular NixOS system.
+  # and is used to maintain compatibility with application data (e.g. databases) created on older NixOS versions.
   #
   # Most users should NEVER change this value after the initial install, for any reason,
   # even if you've upgraded your system to a new NixOS release.

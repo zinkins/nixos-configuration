@@ -10,17 +10,18 @@ in
   users.groups.media = { };
 
   # Manual torrent search / indexer management.
+  # Web access is exposed through Caddy at http://prowlarr.home.arpa.
   # Configure the SOCKS5 indexer proxy in the Prowlarr UI as 127.0.0.1:1080.
   services.prowlarr = {
     enable = true;
-    openFirewall = true;
+    openFirewall = false;
     settings = {
       server.bindaddress = "*";
       log.analyticsEnabled = false;
     };
   };
 
-  # Torrent downloads stay on the normal host network.  The AmneziaWG module
+  # Torrent downloads stay on the normal host network. The AmneziaWG module
   # deliberately does not install a default VPN route, so peer traffic is not
   # sent through the VPN.
   services.qbittorrent = {
@@ -29,10 +30,13 @@ in
     profileDir = qbittorrentProfile;
     webuiPort = 8080;
     torrentingPort = 49160;
-    openFirewall = true;
+
+    # Do not expose the Web UI port directly. The BitTorrent listen port is
+    # opened explicitly below while the Web UI goes through Caddy.
+    openFirewall = false;
   };
 
-  # Seed only the first qBittorrent configuration.  Later changes made in the
+  # Seed only the first qBittorrent configuration. Later changes made in the
   # Web UI (including the password) remain persistent across rebuilds.
   systemd.services.qbittorrent = {
     unitConfig.RequiresMountsFor = [ mediaPath ];
@@ -58,8 +62,10 @@ EOF
     '';
   };
 
-  # Jellyfin replaces MiniDLNA.  Since Jellyfin 10.9 DLNA is an official
-  # plugin, so install "DLNA" once from Dashboard -> Plugins -> Catalog.
+  # Jellyfin replaces MiniDLNA. Since Jellyfin 10.9 DLNA is an official
+  # plugin, install "DLNA" once from Dashboard -> Plugins -> Catalog.
+  # Keep Jellyfin's own firewall opening enabled because DLNA clients fetch
+  # media from Jellyfin directly; browser access can still use Caddy.
   services.jellyfin = {
     enable = true;
     group = "media";
@@ -74,7 +80,8 @@ EOF
     "d ${mediaPath} 2775 qbittorrent media -"
   ];
 
-  # qBittorrent's NixOS module opens its configured ports over TCP.  DHT/uTP
-  # also need the torrent port over UDP.
+  # qBittorrent Web UI (8080) stays behind the firewall/Caddy, while peer,
+  # DHT and uTP traffic still needs the torrent port directly.
+  networking.firewall.allowedTCPPorts = [ 49160 ];
   networking.firewall.allowedUDPPorts = [ 49160 ];
 }
