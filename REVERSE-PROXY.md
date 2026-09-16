@@ -5,108 +5,121 @@ The server provides friendly LAN URLs through Caddy:
 - `http://prowlarr.home`
 - `http://qbittorrent.home`
 - `http://jellyfin.home`
-
-This setup uses plain HTTP on the LAN to avoid local certificate installation on every client and compatibility problems with older devices.
+- `http://adguard.home`
 
 `nixos.home` is also published in local DNS as the server name, but it is not a Caddy application endpoint.
 
-## How name resolution works
+This setup uses plain HTTP on the LAN to avoid local certificate installation on every client and compatibility problems with older devices.
 
-`dnsmasq` runs on the NixOS server and answers the local `*.home` names with the server's current IPv4 address. The address is not hard-coded: at service start the configuration detects the interface carrying the IPv4 default route and creates DNS records from that interface address.
+## DNS architecture
 
-DNS is exposed on TCP/UDP port 53 only to hosts on directly connected networks (`local-service=net`). Unknown `.home` names are kept local and are not forwarded to public DNS.
+AdGuard Home is the only DNS server exposed to LAN clients on TCP/UDP port 53. It provides filtering, logging and upstream DNS.
 
-The NixOS server itself continues using its existing resolver; enabling this DNS service does not rewrite the server's own DNS configuration.
+The `.home` zone stays local:
 
-## One required router/client setting
-
-For other devices to resolve `*.home`, they need to use the NixOS server as a DNS resolver.
-
-The preferred setup is to configure the router's DHCP settings so that the DNS server handed to LAN clients is the LAN IPv4 address of this NixOS machine. Keep the server on a DHCP reservation/static lease so that clients always know where the DNS server is.
-
-If the router cannot advertise a custom DNS server, configure the NixOS server address as DNS manually on the devices where these names are needed.
-
-You can see the server's current LAN address and default interface with:
-
-```bash
-ip -4 route show default
-ip -4 addr
+```text
+LAN client
+   |
+   | DNS :53
+   v
+AdGuard Home
+   |-- *.home --------> dnsmasq 127.0.0.1:5353
+   |                     |-- nixos.home
+   |                     |-- prowlarr.home
+   |                     |-- qbittorrent.home
+   |                     |-- jellyfin.home
+   |                     `-- adguard.home
+   |
+   `-- other domains --> encrypted Quad9 DNS-over-TLS
 ```
+
+The LAN IPv4 address is not hard-coded in Git. At service start, dnsmasq detects the interface carrying the IPv4 default route and uses that interface address for the local names.
+
+## Router/client setting
+
+For other devices to use filtering and resolve `*.home`, configure the router's DHCP server to hand out the NixOS server's LAN IPv4 address as the DNS server.
+
+Keep the NixOS server on a DHCP reservation/static lease so its address remains stable.
+
+On TP-Link Archer AX73 this is configured under:
+
+```text
+Advanced -> Network -> DHCP Server
+Primary DNS   = <NixOS server LAN IPv4>
+Secondary DNS = leave empty
+```
+
+Do not set a public resolver such as `8.8.8.8` or `1.1.1.1` as Secondary DNS, because clients may bypass AdGuard Home.
+
+If IPv6 is enabled on the router, make sure it does not advertise a different public IPv6 DNS resolver to clients; otherwise some devices can bypass the IPv4 AdGuard DNS path.
 
 ## Verify DNS
 
-From a LAN client which uses this server for DNS:
+On the NixOS server:
+
+```bash
+dig @127.0.0.1 -p 5353 prowlarr.home
+dig @127.0.0.1 prowlarr.home
+dig @127.0.0.1 example.com
+```
+
+The first command tests local dnsmasq directly. The second goes through AdGuard Home and should return the same LAN address. The third verifies normal upstream DNS.
+
+From a LAN client after it receives the NixOS server as DNS:
 
 ```bash
 nslookup prowlarr.home
 nslookup qbittorrent.home
 nslookup jellyfin.home
+nslookup adguard.home
 ```
 
-All three should resolve to the NixOS server's LAN address.
-
-From the NixOS server you can query dnsmasq explicitly even if the server itself uses another resolver:
-
-```bash
-dig @127.0.0.1 prowlarr.home
-dig @127.0.0.1 qbittorrent.home
-dig @127.0.0.1 jellyfin.home
-```
-
-The configuration installs the DNS utilities package so `dig` and `nslookup` are available after activation.
+All should resolve to the NixOS server's LAN address.
 
 ## Verify Caddy
 
-Check services:
-
 ```bash
-systemctl status caddy dnsmasq --no-pager
+systemctl status caddy adguardhome dnsmasq --no-pager
 ```
 
-Test the virtual hosts directly on the server:
+Test virtual hosts directly on the server:
 
 ```bash
 curl -I -H 'Host: prowlarr.home' http://127.0.0.1/
 curl -I -H 'Host: qbittorrent.home' http://127.0.0.1/
 curl -I -H 'Host: jellyfin.home' http://127.0.0.1/
+curl -I -H 'Host: adguard.home' http://127.0.0.1/
 ```
-
-Caddy listens on TCP port 80.
 
 ## Firewall behavior
 
-- Prowlarr port `9696` is no longer opened in the firewall.
-- qBittorrent Web UI port `8080` is no longer opened in the firewall.
-- qBittorrent peer port `49160` remains open over TCP and UDP.
-- Jellyfin keeps its normal firewall opening because DLNA devices need to fetch media from Jellyfin directly.
-- DNS port `53` (TCP/UDP) and Caddy HTTP port `80` are open for the LAN.
-
-The applications still listen on their normal local ports, so Caddy can reach them over loopback.
+- Caddy: TCP `80` open to LAN.
+- AdGuard Home DNS: TCP/UDP `53` open to LAN.
+- AdGuard Home Web UI: `127.0.0.1:3000` only, reached through Caddy.
+- dnsmasq: `127.0.0.1:5353` only, used by AdGuard Home for `.home`.
+- Prowlarr `9696`: no direct firewall opening.
+- qBittorrent Web UI `8080`: no direct firewall opening.
+- qBittorrent peer port `49160`: remains open over TCP/UDP.
+- Jellyfin keeps its normal direct access required by DLNA clients.
 
 ## Troubleshooting
 
-If DNS does not start:
-
 ```bash
+journalctl -u adguardhome -b --no-pager
 journalctl -u dnsmasq -b --no-pager
+journalctl -u caddy -b --no-pager
 cat /run/dnsmasq-home.conf
-ip -4 route show default
+ss -lntup | grep -E ':(53|80|3000|5353)\b'
 ```
 
-The runtime file should look similar to:
+The generated local DNS file should look similar to:
 
 ```text
 interface-name=nixos.home,wlan0/4
 interface-name=prowlarr.home,wlan0/4
 interface-name=qbittorrent.home,wlan0/4
 interface-name=jellyfin.home,wlan0/4
+interface-name=adguard.home,wlan0/4
 ```
 
 The actual interface name may be different.
-
-If a hostname resolves but the page does not open:
-
-```bash
-journalctl -u caddy -b --no-pager
-curl -v -H 'Host: prowlarr.home' http://127.0.0.1/
-```
