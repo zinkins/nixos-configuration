@@ -31,6 +31,8 @@ For each run the updater:
 
 The systemd service itself runs as root, so its `dry-activate` and `switch` steps do not require interactive authentication.
 
+`/etc/nixos` is declared as a system-wide Git `safe.directory`. This is required when the checkout is owned by the admin user: Nix opens a local Git flake through libgit2 as root and otherwise rejects the ownership mismatch.
+
 If the build or dry activation fails, the checkout is reset to the previous revision and the running system is left unchanged.
 
 If `switch` fails, the checkout is reset to the previous revision and the updater attempts to switch back to that previous configuration.
@@ -48,11 +50,21 @@ Logs are kept in the systemd journal.
 Because the updater itself is part of the NixOS configuration, install this revision once manually:
 
 ```bash
+sudo git config --global --add safe.directory /etc/nixos
 sudo git -c safe.directory=/etc/nixos -C /etc/nixos pull --ff-only origin master
 sudo nixos-rebuild switch --flake /etc/nixos#nixos
 ```
 
 After that the timer handles later changes automatically.
+
+If an older updater has already failed with `repository path '/etc/nixos' is not owned by current user`, bootstrap this setting once in root's Git configuration and retry the service:
+
+```bash
+sudo git config --global --add safe.directory /etc/nixos
+sudo systemctl start nixos-config-sync.service
+```
+
+After the updated configuration is activated, the same exception is provided declaratively by `/etc/gitconfig`.
 
 ## Manual preflight check
 

@@ -121,6 +121,14 @@ let
   '';
 in
 {
+  # The updater runs as root, while /etc/nixos may be owned by the admin user.
+  # Nix opens local Git flakes through libgit2, so git_cmd's per-command
+  # safe.directory setting is not enough for nixos-rebuild.
+  programs.git = {
+    enable = true;
+    config.safe.directory = repoPath;
+  };
+
   systemd.services.nixos-config-sync = {
     description = "Pull, validate and activate NixOS configuration from Git";
     wants = [ "network-online.target" ];
