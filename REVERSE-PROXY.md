@@ -2,25 +2,25 @@
 
 The server provides friendly LAN URLs through Caddy:
 
-- `http://prowlarr.home.arpa`
-- `http://qbittorrent.home.arpa`
-- `http://jellyfin.home.arpa`
+- `http://prowlarr.home`
+- `http://qbittorrent.home`
+- `http://jellyfin.home`
 
-The `.home.arpa` suffix is intended for private home networks. This setup uses plain HTTP on the LAN to avoid local certificate installation on every client and compatibility problems with older devices.
+This setup uses plain HTTP on the LAN to avoid local certificate installation on every client and compatibility problems with older devices.
 
-`nixos.home.arpa` is also published in local DNS as the server name, but it is not a Caddy application endpoint.
+`nixos.home` is also published in local DNS as the server name, but it is not a Caddy application endpoint.
 
 ## How name resolution works
 
-`dnsmasq` runs on the NixOS server and answers the local `*.home.arpa` names with the server's current IPv4 address. The address is not hard-coded: at service start the configuration detects the interface carrying the IPv4 default route and creates DNS records from that interface address.
+`dnsmasq` runs on the NixOS server and answers the local `*.home` names with the server's current IPv4 address. The address is not hard-coded: at service start the configuration detects the interface carrying the IPv4 default route and creates DNS records from that interface address.
 
-DNS is exposed on TCP/UDP port 53 only to hosts on directly connected networks (`local-service=net`). Unknown `home.arpa` names are kept local and are not forwarded to public DNS.
+DNS is exposed on TCP/UDP port 53 only to hosts on directly connected networks (`local-service=net`). Unknown `.home` names are kept local and are not forwarded to public DNS.
 
 The NixOS server itself continues using its existing resolver; enabling this DNS service does not rewrite the server's own DNS configuration.
 
 ## One required router/client setting
 
-For other devices to resolve `*.home.arpa`, they need to use the NixOS server as a DNS resolver.
+For other devices to resolve `*.home`, they need to use the NixOS server as a DNS resolver.
 
 The preferred setup is to configure the router's DHCP settings so that the DNS server handed to LAN clients is the LAN IPv4 address of this NixOS machine. Keep the server on a DHCP reservation/static lease so that clients always know where the DNS server is.
 
@@ -38,9 +38,9 @@ ip -4 addr
 From a LAN client which uses this server for DNS:
 
 ```bash
-nslookup prowlarr.home.arpa
-nslookup qbittorrent.home.arpa
-nslookup jellyfin.home.arpa
+nslookup prowlarr.home
+nslookup qbittorrent.home
+nslookup jellyfin.home
 ```
 
 All three should resolve to the NixOS server's LAN address.
@@ -48,9 +48,9 @@ All three should resolve to the NixOS server's LAN address.
 From the NixOS server you can query dnsmasq explicitly even if the server itself uses another resolver:
 
 ```bash
-dig @127.0.0.1 prowlarr.home.arpa
-dig @127.0.0.1 qbittorrent.home.arpa
-dig @127.0.0.1 jellyfin.home.arpa
+dig @127.0.0.1 prowlarr.home
+dig @127.0.0.1 qbittorrent.home
+dig @127.0.0.1 jellyfin.home
 ```
 
 The configuration installs the DNS utilities package so `dig` and `nslookup` are available after activation.
@@ -66,9 +66,9 @@ systemctl status caddy dnsmasq --no-pager
 Test the virtual hosts directly on the server:
 
 ```bash
-curl -I -H 'Host: prowlarr.home.arpa' http://127.0.0.1/
-curl -I -H 'Host: qbittorrent.home.arpa' http://127.0.0.1/
-curl -I -H 'Host: jellyfin.home.arpa' http://127.0.0.1/
+curl -I -H 'Host: prowlarr.home' http://127.0.0.1/
+curl -I -H 'Host: qbittorrent.home' http://127.0.0.1/
+curl -I -H 'Host: jellyfin.home' http://127.0.0.1/
 ```
 
 Caddy listens on TCP port 80.
@@ -89,17 +89,17 @@ If DNS does not start:
 
 ```bash
 journalctl -u dnsmasq -b --no-pager
-cat /run/dnsmasq-home-arpa.conf
+cat /run/dnsmasq-home.conf
 ip -4 route show default
 ```
 
 The runtime file should look similar to:
 
 ```text
-interface-name=nixos.home.arpa,wlan0/4
-interface-name=prowlarr.home.arpa,wlan0/4
-interface-name=qbittorrent.home.arpa,wlan0/4
-interface-name=jellyfin.home.arpa,wlan0/4
+interface-name=nixos.home,wlan0/4
+interface-name=prowlarr.home,wlan0/4
+interface-name=qbittorrent.home,wlan0/4
+interface-name=jellyfin.home,wlan0/4
 ```
 
 The actual interface name may be different.
@@ -108,5 +108,5 @@ If a hostname resolves but the page does not open:
 
 ```bash
 journalctl -u caddy -b --no-pager
-curl -v -H 'Host: prowlarr.home.arpa' http://127.0.0.1/
+curl -v -H 'Host: prowlarr.home' http://127.0.0.1/
 ```
