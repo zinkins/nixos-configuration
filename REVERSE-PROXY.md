@@ -5,13 +5,14 @@ The server provides friendly LAN URLs through Caddy:
 - `http://prowlarr.home.arpa`
 - `http://qbittorrent.home.arpa`
 - `http://jellyfin.home.arpa`
-- `http://nixos.home.arpa`
 
 The `.home.arpa` suffix is intended for private home networks. This setup uses plain HTTP on the LAN to avoid local certificate installation on every client and compatibility problems with older devices.
 
+`nixos.home.arpa` is also published in local DNS as the server name, but it is not a Caddy application endpoint.
+
 ## How name resolution works
 
-`dnsmasq` runs on the NixOS server and answers the four `*.home.arpa` names with the server's current IPv4 address. The address is not hard-coded: at service start the configuration detects the interface carrying the IPv4 default route and creates DNS records from that interface address.
+`dnsmasq` runs on the NixOS server and answers the local `*.home.arpa` names with the server's current IPv4 address. The address is not hard-coded: at service start the configuration detects the interface carrying the IPv4 default route and creates DNS records from that interface address.
 
 DNS is exposed on TCP/UDP port 53 only to hosts on directly connected networks (`local-service=net`). Unknown `home.arpa` names are kept local and are not forwarded to public DNS.
 
@@ -51,6 +52,8 @@ dig @127.0.0.1 prowlarr.home.arpa
 dig @127.0.0.1 qbittorrent.home.arpa
 dig @127.0.0.1 jellyfin.home.arpa
 ```
+
+The configuration installs the DNS utilities package so `dig` and `nslookup` are available after activation.
 
 ## Verify Caddy
 
