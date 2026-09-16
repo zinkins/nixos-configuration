@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 
 let
   namespaceName = "ai-vpn";
@@ -6,7 +6,6 @@ let
   namespaceInterface = "ai-vpn-ns";
   hostAddress = "10.203.0.1";
   namespaceAddress = "10.203.0.2";
-  subnet = "10.203.0.0/30";
   routeTable = "51820";
   routePriority = "10010";
 
@@ -18,12 +17,12 @@ let
       exit 1
     fi
 
-    if [ "${SUDO_USER:-}" != "sergey" ]; then
+    if [ "''${SUDO_USER:-}" != "sergey" ]; then
       echo "ai-vpn-exec is only allowed for user sergey" >&2
       exit 1
     fi
 
-    target="${1:-}"
+    target="''${1:-}"
     if [ -z "$target" ]; then
       echo "Usage: ai-vpn-exec {codex|claude|check} [args...]" >&2
       exit 2
@@ -68,7 +67,7 @@ let
       exit 1
     fi
 
-    # sudo sanitizes the environment.  Restore the normal user identity and
+    # sudo sanitizes the environment. Restore the normal user identity and
     # command search path before dropping privileges inside the namespace.
     export HOME=/home/sergey
     export USER=sergey
@@ -121,7 +120,7 @@ let
     ${pkgs.iproute2}/bin/ip -n ${namespaceName} link set ${namespaceInterface} up
     ${pkgs.iproute2}/bin/ip -n ${namespaceName} route add default via ${hostAddress} dev ${namespaceInterface}
 
-    # Avoid IPv6 becoming an accidental alternate egress path.  The namespace
+    # Avoid IPv6 becoming an accidental alternate egress path. The namespace
     # intentionally has IPv4 only.
     ${pkgs.iproute2}/bin/ip netns exec ${namespaceName} \
       ${pkgs.procps}/bin/sysctl -q -w net.ipv6.conf.all.disable_ipv6=1
@@ -142,7 +141,7 @@ let
   '';
 in
 {
-  # The namespace gets public DNS directly through the VPN.  ip-netns(8)
+  # The namespace gets public DNS directly through the VPN. ip-netns(8)
   # automatically substitutes this file for /etc/resolv.conf inside ai-vpn.
   environment.etc."netns/${namespaceName}/resolv.conf".text = ''
     nameserver 9.9.9.9
@@ -170,17 +169,23 @@ in
     };
   };
 
-  # NAT only to awg0.  The final reject rule is the kill switch: if policy
-  # routing ever falls through to the normal default route, forwarding from the
-  # AI namespace is rejected instead of leaking through the ISP connection.
+  # Forward and masquerade the namespace only through awg0. NixOS generates
+  # the normal -i ai-vpn-host -o awg0 accept/NAT rules for this pair.
   networking.nat = {
     enable = true;
     externalInterface = "awg0";
     internalInterfaces = [ hostInterface ];
-    extraCommands = ''
-      iptables -w -A nixos-filter-forward -i ${hostInterface} ! -o awg0 -j REJECT
-    '';
   };
+
+  # Hard kill switch. Insert it at the very beginning of FORWARD so it runs
+  # before generic ESTABLISHED/RELATED rules. If policy routing ever falls back
+  # to a normal interface, even an already-open AI connection is rejected.
+  networking.firewall.extraCommands = lib.mkAfter ''
+    iptables -w -I FORWARD 1 -i ${hostInterface} ! -o awg0 -j REJECT
+  '';
+  networking.firewall.extraStopCommands = lib.mkBefore ''
+    iptables -w -D FORWARD -i ${hostInterface} ! -o awg0 -j REJECT 2>/dev/null || true
+  '';
 
   # Policy routing is asymmetric by design; strict rpfilter would reject valid
   # packets returning through the tunnel.
@@ -200,7 +205,7 @@ in
   ];
 
   # Keep only narrowly scoped credentials that the CLIs may already use in the
-  # user's shell.  Dangerous loader variables are still stripped by sudo.
+  # user's shell. Dangerous loader variables are still stripped by sudo.
   security.sudo.extraConfig = ''
     Defaults:sergey env_keep += "SSH_AUTH_SOCK OPENAI_API_KEY ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN"
   '';
