@@ -66,11 +66,20 @@ EOF
     port = 3000;
     openFirewall = false;
 
-    # Keep UI changes that are not explicitly managed below (for example an
-    # administrator account) while re-applying the security baseline on restart.
+    # Preserve UI settings that are not explicitly managed here while
+    # re-applying this DNS/filtering baseline on every service restart.
     mutableSettings = true;
 
     settings = {
+      # AdGuard Home stores only the BCrypt hash.  The plaintext password is
+      # intentionally not committed to this public repository.
+      users = [
+        {
+          name = "sergey";
+          password = "$2y$12$O1nuVbkrhw0UFpOr1wfrO.AAvQKFp40q4T8Pte1cfbG1.mXXx5JvO";
+        }
+      ];
+
       dns = {
         bind_hosts = [ "0.0.0.0" ];
         port = 53;
