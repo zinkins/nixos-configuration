@@ -1,10 +1,13 @@
-{ config, lib, pkgs, ... }:
+{ lib, pkgs, ... }:
 
 let
   localDomain = "home.arpa";
   dnsmasqRuntimeConfig = "/run/dnsmasq-home-arpa.conf";
 in
 {
+  # Handy for checking the local DNS service with `dig` and `nslookup`.
+  environment.systemPackages = [ pkgs.dnsutils ];
+
   # Friendly local names. Explicit http:// site addresses keep this LAN-only
   # setup certificate-free, which is useful for older clients and TVs.
   services.caddy = {
