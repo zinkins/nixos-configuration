@@ -76,7 +76,7 @@ EOF
       users = [
         {
           name = "sergey";
-          password = "$2y$12$O1nuVbkrhw0UFpOr1wfrO.AAvQKFp40q4T8Pte1cfbG1.mXXx5JvO";
+          password = "$2y$12$B3TfpU8aUeB3Udpdpl05eO6ukFA9eruTsr25beYtnbl/U.DNcSGS2";
         }
       ];
 
