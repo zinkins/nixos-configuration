@@ -14,6 +14,7 @@
       ./adguard.nix
       ./reverse-proxy.nix
       ./ai-vpn.nix
+      ./byparr.nix
       ./auto-update.nix
     ];
 

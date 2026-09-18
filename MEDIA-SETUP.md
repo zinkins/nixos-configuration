@@ -1,36 +1,50 @@
-# Media stack: first-run setup
+# Media stack: setup and network architecture
 
-The NixOS configuration installs:
+The NixOS media stack contains:
 
-- Prowlarr for manual torrent/indexer search;
-- qBittorrent-nox for downloads to `/myraid1/nas/films`;
+- Prowlarr for indexer management and manual search;
+- qBittorrent for downloads to `/myraid1/nas/films`;
 - Jellyfin for the media library and DLNA;
-- a local SOCKS5 proxy on `127.0.0.1:1080` whose outgoing traffic is forced through AmneziaWG.
+- `media-vpn-proxy`, a localhost SOCKS5 proxy on `127.0.0.1:1080` whose outbound connections are forced through AmneziaWG;
+- Byparr on `127.0.0.1:8191` for Cloudflare-protected indexers.
 
-The host default route is intentionally left unchanged. qBittorrent peer traffic therefore uses the normal Internet connection unless a proxy is explicitly enabled in qBittorrent.
+The host default route is intentionally left unchanged. qBittorrent peer traffic therefore stays on the normal Internet connection. Only traffic explicitly sent to the SOCKS proxy uses AmneziaWG.
 
-## 1. Apply the configuration
-
-```bash
-sudo nixos-rebuild switch --flake .#nixos
-```
-
-Check the services:
+## 1. Apply and verify the configuration
 
 ```bash
-systemctl --no-pager --full status amneziawg media-vpn-proxy prowlarr qbittorrent jellyfin
+sudo nixos-rebuild switch --flake /etc/nixos#nixos
 ```
+
+Check the media services:
+
+```bash
+systemctl --no-pager --full status \
+  amneziawg media-vpn-proxy podman-byparr prowlarr qbittorrent jellyfin
+```
+
+The LAN-facing browser URLs are provided by Caddy:
+
+```text
+http://prowlarr.home
+http://qbittorrent.home
+http://jellyfin.home
+```
+
+Prowlarr port `9696` and qBittorrent Web UI port `8080` are intentionally not opened directly to the LAN.
 
 ## 2. Verify split VPN routing
 
-Compare the public address of the normal connection and the SOCKS proxy:
+Compare the normal public address with the SOCKS path:
 
 ```bash
-curl -4 https://ifconfig.me
-curl -4 --socks5-hostname 127.0.0.1:1080 https://ifconfig.me
+curl -4 https://api.ipify.org
+echo
+curl -4 --socks5-hostname 127.0.0.1:1080 https://api.ipify.org
+echo
 ```
 
-The two addresses should be different. The second one should be the VPN address.
+The addresses should differ. The second address should be the Amnezia VPN exit address.
 
 If `media-vpn-proxy` does not start, inspect:
 
@@ -46,62 +60,91 @@ ip -4 route show table 51820
 Open:
 
 ```text
-http://SERVER_IP:8080
+http://qbittorrent.home
 ```
 
-The initial configuration already sets the save path to:
+The initial configuration sets the save path to:
 
 ```text
 /myraid1/nas/films
 ```
 
-qBittorrent may generate a temporary Web UI password on first start. If needed, find it with:
+qBittorrent may generate a temporary Web UI password on first start. If needed:
 
 ```bash
 journalctl -u qbittorrent -b --no-pager | grep -i password
 ```
 
-Then set a permanent Web UI password.
+Do not enable a global qBittorrent proxy unless you specifically want torrent traffic to use the VPN. The intended default is:
 
-Do not configure a qBittorrent proxy initially. This keeps peer/video traffic on the normal Internet connection.
+```text
+qBittorrent peer / DHT / uTP traffic -> normal ISP route
+```
 
-If tracker announce requests are blocked later, set qBittorrent's proxy to SOCKS5 `127.0.0.1:1080`, but keep **Use proxy for peer connections** disabled. That allows tracker/Web requests to use the VPN without sending the downloaded video payload through it.
+The peer listen port remains `49160` over TCP/UDP.
 
-## 4. Prowlarr and RuTracker
+## 4. Prowlarr, Amnezia VPN and RuTracker
 
 Open:
 
 ```text
-http://SERVER_IP:9696
+http://prowlarr.home
 ```
 
-In **Settings -> Indexers -> Indexer Proxies**, add a SOCKS5 proxy:
+### VPN proxy
+
+In `Settings -> Indexers -> Indexer Proxies`, add SOCKS5:
 
 ```text
+Name: Amnezia VPN
 Host: 127.0.0.1
 Port: 1080
-Tag: vpn
+Tags: vpn
 ```
 
-Add RuTracker as an indexer, enter the RuTracker username/password in the Prowlarr UI, and give the indexer the `vpn` tag. Credentials must not be committed to this public repository.
+Torrent indexers that should be reached only through AmneziaWG should receive the `vpn` tag.
 
-In **Settings -> Download Clients**, add qBittorrent:
+### Cloudflare solver
+
+For RuTracker and other Cloudflare-protected indexers, also add a `FlareSolverr` indexer proxy pointing to Byparr:
+
+```text
+Name: Byparr
+Host: http://127.0.0.1:8191
+Request Timeout: 60 seconds
+Tags: cloudflare
+```
+
+RuTracker should have both tags:
+
+```text
+vpn
+cloudflare
+```
+
+This causes Prowlarr's normal RuTracker HTTP traffic to use the SOCKS5 VPN proxy while Cloudflare challenge handling uses Byparr. Byparr itself is also configured to use the same SOCKS5 endpoint, so both paths leave through the same AmneziaWG exit IP.
+
+See `BYPARR.md` for detailed verification and troubleshooting.
+
+Enter the RuTracker username/password only in the Prowlarr UI. Do not commit credentials to this repository.
+
+### qBittorrent download client
+
+In `Settings -> Download Clients`, add qBittorrent using the local connection:
 
 ```text
 Host: 127.0.0.1
 Port: 8080
 ```
 
-The local qBittorrent connection is configured to allow localhost without authentication. If you later enable authentication for localhost too, enter the qBittorrent credentials in Prowlarr.
-
-You can then use Prowlarr's manual search, including Cyrillic/Russian queries, and send the selected release directly to qBittorrent.
+The Prowlarr-to-qBittorrent connection is local and does not involve the VPN.
 
 ## 5. Jellyfin and DLNA
 
 Open:
 
 ```text
-http://SERVER_IP:8096
+http://jellyfin.home
 ```
 
 Complete the initial Jellyfin wizard and add a media library using:
@@ -110,11 +153,13 @@ Complete the initial Jellyfin wizard and add a media library using:
 /myraid1/nas/films
 ```
 
-A single mixed directory is supported, but metadata recognition is less reliable than separate movie/TV libraries. This configuration deliberately keeps one directory as requested.
+A single mixed directory works, although metadata recognition is usually more reliable with separate movie and TV libraries.
 
 DLNA is an official Jellyfin plugin rather than part of the server core. Install **DLNA** once from:
 
-**Dashboard -> Plugins -> Catalog**
+```text
+Dashboard -> Plugins -> Catalog
+```
 
 Then restart Jellyfin:
 
@@ -122,14 +167,20 @@ Then restart Jellyfin:
 sudo systemctl restart jellyfin
 ```
 
-The LG TV should then discover the Jellyfin DLNA server on the local network.
+Jellyfin retains its normal firewall openings because DLNA clients such as the LG TV need direct media access; browser access can still use Caddy at `jellyfin.home`.
 
-Playback progress is stored by Jellyfin when the DLNA client reports it correctly. Whether resume works reliably therefore also depends on the DLNA implementation in the 2014 LG TV; test it with one file before relying on it.
+Playback resume over DLNA depends partly on what the TV reports back to Jellyfin, so an older LG client may not preserve progress reliably.
 
-## 6. Useful addresses
+## 6. Useful local endpoints
 
-- Prowlarr: `http://SERVER_IP:9696`
-- qBittorrent: `http://SERVER_IP:8080`
-- Jellyfin: `http://SERVER_IP:8096`
-- VPN-only SOCKS5 proxy: `127.0.0.1:1080`
-- Downloads: `/myraid1/nas/films`
+```text
+Prowlarr LAN URL:       http://prowlarr.home
+qBittorrent LAN URL:   http://qbittorrent.home
+Jellyfin LAN URL:      http://jellyfin.home
+VPN SOCKS5:            127.0.0.1:1080
+Byparr API:             127.0.0.1:8191
+qBittorrent local API: 127.0.0.1:8080
+Downloads:             /myraid1/nas/films
+```
+
+Ports `1080`, `8191`, `9696`, and `8080` are not intended as direct LAN-facing service endpoints. Use the `.home` Caddy URLs for browser access.

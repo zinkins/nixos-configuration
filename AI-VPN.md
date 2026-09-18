@@ -20,6 +20,29 @@ This is deliberately stronger than setting `HTTP_PROXY` or `HTTPS_PROXY`: child 
 
 If `amneziawg.service`, interface `awg0`, or the VPN default route is unavailable, the wrappers refuse to start. If the tunnel disappears after a CLI has started, the firewall rule is evaluated before generic `ESTABLISHED,RELATED` forwarding, so an already-open connection cannot fall back to the normal ISP interface.
 
+## Relationship to the media VPN path
+
+The AI isolation and the media/indexer VPN path share the same AmneziaWG tunnel but use different enforcement mechanisms:
+
+```text
+Codex / Claude
+  -> ai-vpn network namespace
+  -> policy routing + NAT + FORWARD kill switch
+  -> awg0
+
+Prowlarr / Byparr selected traffic
+  -> SOCKS5 127.0.0.1:1080
+  -> media-vpn-proxy bound to the AmneziaWG address
+  -> awg0
+
+qBittorrent peers
+  -> normal host route
+```
+
+Do not point Codex or Claude at the media SOCKS proxy as a replacement for the namespace. The namespace is intentionally fail-closed for the complete process tree.
+
+See `MEDIA-SETUP.md` and `BYPARR.md` for the separate media/indexer path.
+
 ## Commands
 
 Use the commands normally:
@@ -77,9 +100,10 @@ Then:
 ```bash
 ai-vpn-check
 codex --version
+claude --version
 ```
 
-`ai-vpn-check` and `codex` must refuse to start instead of using the ordinary ISP route.
+All VPN-dependent commands must refuse to start instead of using the ordinary ISP route.
 
 Restore the tunnel:
 
