@@ -10,8 +10,10 @@ in
   users.groups.media = { };
 
   # Manual torrent search / indexer management.
-  # Web access is exposed through Caddy at http://prowlarr.home.arpa.
-  # Configure the SOCKS5 indexer proxy in the Prowlarr UI as 127.0.0.1:1080.
+  # LAN Web access is exposed through Caddy at http://prowlarr.home.
+  # In Prowlarr, selected torrent indexers use the SOCKS5 proxy
+  # 127.0.0.1:1080 (tag: vpn). Cloudflare-protected indexers can additionally
+  # use Byparr/FlareSolverr (tag: cloudflare); see BYPARR.md.
   services.prowlarr = {
     enable = true;
     openFirewall = false;
