@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ ... }:
 
 {
   # Run Byparr locally for Cloudflare-protected Prowlarr indexers.
@@ -36,7 +36,4 @@
     requires = [ "media-vpn-proxy.service" ];
     after = [ "media-vpn-proxy.service" ];
   };
-
-  # Byparr must stay local-only; nothing opens 8191 in the NixOS firewall.
-  networking.firewall.allowedTCPPorts = lib.mkDefault [ ];
 }
