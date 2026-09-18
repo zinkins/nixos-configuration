@@ -8,7 +8,9 @@
     backend = "podman";
 
     containers.byparr = {
-      image = "ghcr.io/thephaseless/byparr:v3.0.4";
+      # GitHub releases use names like v3.0.4, but GHCR publishes the stable
+      # container tag without the leading "v" (3.0.4).
+      image = "ghcr.io/thephaseless/byparr:3.0.4";
       autoStart = true;
 
       environment = {
