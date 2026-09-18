@@ -9,66 +9,74 @@ The server provides friendly LAN URLs through Caddy:
 
 `nixos.home` is also published in local DNS as the server name.
 
-This setup uses plain HTTP on the LAN to avoid local certificate installation on every client and compatibility problems with older devices.
+Use the explicit `http://` scheme. This LAN setup intentionally does not enable HTTPS, avoiding local CA/certificate installation and compatibility problems with older devices.
 
 ## DNS architecture
 
-AdGuard Home is the DNS endpoint exposed to LAN clients on TCP/UDP port 53. It performs network-wide filtering and forwards the private `.home` zone to dnsmasq on `127.0.0.1:5353`.
-
-`dnsmasq` answers the local names with the server's current IPv4 address. The address is not hard-coded: at service start the configuration detects the interface carrying the IPv4 default route and creates DNS records from that interface address.
-
-Unknown `.home` names are kept local and are not forwarded to public DNS. Normal Internet DNS requests are handled by AdGuard Home and sent to encrypted upstream DNS.
-
-See `ADGUARD.md` for filtering details and router setup.
-
-## One required router/client setting
-
-For other devices to resolve `*.home` and use network-wide filtering, they need to use the NixOS server as their DNS resolver.
-
-The preferred setup is to configure the router's DHCP settings so that the Primary DNS handed to LAN clients is the LAN IPv4 address of this NixOS machine. Keep the server on a DHCP reservation/static lease. Leave Secondary DNS empty so clients do not bypass AdGuard Home.
-
-You can see the server's current LAN address and default interface with:
-
-```bash
-ip -4 route show default
-ip -4 addr
+```text
+LAN client
+   |
+   | DNS TCP/UDP 53
+   v
+AdGuard Home
+   |
+   +-- *.home --> dnsmasq 127.0.0.1:5353 --> server LAN IPv4
+   |
+   +-- public DNS --> Quad9 over DNS-over-TLS
 ```
+
+AdGuard Home is the only DNS endpoint exposed to LAN clients. `dnsmasq` is loopback-only and exists solely for the private `.home` zone.
+
+The `.home` records are generated from the IPv4 interface carrying the server's default route, so the LAN IP is not hard-coded in Git.
+
+Unknown `.home` names remain local and are not sent to public DNS.
+
+See `ADGUARD.md` for filtering, DHCP, browser DoH, IPv6, and client-side VPN troubleshooting.
+
+## Router/client requirement
+
+LAN clients must actually use the NixOS server as their DNS resolver. On the TP-Link Archer AX73 configure DHCP to hand out the server LAN IPv4 as Primary DNS and leave Secondary DNS empty.
+
+Keep the server on a DHCP reservation/static lease.
+
+After changing DHCP DNS, renew the client's lease or reconnect it. Verify the DNS address on the client rather than assuming the router change was applied.
+
+A browser with an explicitly configured Secure DNS/DoH provider can bypass system DNS and fail to resolve `.home` even when `nslookup` works. A client VPN may also block access to the LAN or DNS port 53; see `ADGUARD.md`.
 
 ## Verify DNS
 
-From a LAN client which uses this server for DNS:
+From a LAN client:
 
-```bash
+```text
 nslookup prowlarr.home
 nslookup qbittorrent.home
 nslookup jellyfin.home
 nslookup adguard.home
 ```
 
-All names should resolve to the NixOS server's LAN address.
+All names should resolve to the NixOS server's LAN IPv4.
+
+To bypass DHCP/client resolver selection and query the NixOS server explicitly:
+
+```text
+nslookup adguard.home <SERVER_IP>
+```
 
 From the NixOS server:
 
 ```bash
 dig @127.0.0.1 prowlarr.home
-dig @127.0.0.1 google.com
-```
-
-To query the local dnsmasq zone directly:
-
-```bash
+dig @127.0.0.1 example.com
 dig @127.0.0.1 -p 5353 prowlarr.home
 ```
 
 ## Verify Caddy
 
-Check services:
-
 ```bash
 systemctl status caddy adguardhome dnsmasq --no-pager
 ```
 
-Test the virtual hosts directly on the server:
+Test the virtual hosts locally:
 
 ```bash
 curl -I -H 'Host: prowlarr.home' http://127.0.0.1/
@@ -79,20 +87,33 @@ curl -I -H 'Host: adguard.home' http://127.0.0.1/
 
 Caddy listens on TCP port 80.
 
-## Firewall behavior
+## Firewall / exposure
 
-- Prowlarr port `9696` is not opened directly in the firewall.
-- qBittorrent Web UI port `8080` is not opened directly in the firewall.
-- AdGuard Home Web UI port `3000` is bound to loopback only.
-- qBittorrent peer port `49160` remains open over TCP and UDP.
-- Jellyfin keeps its normal firewall opening because DLNA devices need to fetch media from Jellyfin directly.
-- AdGuard Home DNS port `53` is open over TCP/UDP.
-- Caddy HTTP port `80` is open for the LAN.
-- dnsmasq port `5353` is loopback-only and is not exposed to the LAN.
+```text
+53 TCP/UDP   AdGuard Home DNS       LAN-facing
+80 TCP       Caddy                  LAN-facing
+49160 TCP/UDP qBittorrent peers    Internet/LAN as required for torrenting
+5353         dnsmasq                loopback only
+3000         AdGuard Home UI        loopback only
+1080         media VPN SOCKS5       loopback only
+8191         Byparr API             loopback only
+9696         Prowlarr Web UI        not directly opened to LAN
+8080         qBittorrent Web UI     not directly opened to LAN
+```
+
+Jellyfin keeps its own NixOS firewall openings because DLNA clients need direct service discovery/media access. Browser access should still use `http://jellyfin.home`.
+
+## Media VPN and Byparr
+
+The reverse proxy is independent from outbound media routing.
+
+Prowlarr can send selected indexer requests through the localhost SOCKS5 service `127.0.0.1:1080`, which exits through AmneziaWG. Cloudflare-protected indexers can additionally use Byparr at `127.0.0.1:8191`; Byparr's browser is itself forced through the same SOCKS5 endpoint.
+
+See `MEDIA-SETUP.md` and `BYPARR.md`.
 
 ## AI CLI traffic
 
-Codex and Claude Code use a separate fail-closed network namespace whose only Internet egress is the AmneziaWG `awg0` tunnel. This is independent from the LAN reverse-proxy/DNS setup. See `AI-VPN.md` for details and verification commands.
+Codex and Claude Code use a separate fail-closed network namespace whose only Internet egress is AmneziaWG `awg0`. This is independent of Caddy, AdGuard and the media SOCKS proxy. See `AI-VPN.md`.
 
 ## Troubleshooting
 
@@ -107,18 +128,22 @@ ip -4 route show default
 The runtime file should look similar to:
 
 ```text
-interface-name=nixos.home,wlan0/4
-interface-name=prowlarr.home,wlan0/4
-interface-name=qbittorrent.home,wlan0/4
-interface-name=jellyfin.home,wlan0/4
-interface-name=adguard.home,wlan0/4
+interface-name=nixos.home,<LAN_INTERFACE>/4
+interface-name=prowlarr.home,<LAN_INTERFACE>/4
+interface-name=qbittorrent.home,<LAN_INTERFACE>/4
+interface-name=jellyfin.home,<LAN_INTERFACE>/4
+interface-name=adguard.home,<LAN_INTERFACE>/4
 ```
 
-The actual interface name may be different.
-
-If a hostname resolves but the page does not open:
+If a hostname resolves but the page does not open, test TCP 80 and Caddy separately:
 
 ```bash
 journalctl -u caddy -b --no-pager
 curl -v -H 'Host: prowlarr.home' http://127.0.0.1/
+```
+
+From Windows:
+
+```powershell
+Test-NetConnection <SERVER_IP> -Port 80
 ```
