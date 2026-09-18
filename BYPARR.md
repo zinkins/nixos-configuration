@@ -2,6 +2,14 @@
 
 Byparr runs locally on the NixOS host and provides a FlareSolverr-compatible API for indexers such as RuTracker that return a Cloudflare browser challenge to Prowlarr.
 
+The container image is pinned to:
+
+```text
+ghcr.io/thephaseless/byparr:3.0.4
+```
+
+Important: the upstream Git release is named `v3.0.4`, but the GHCR container tag is `3.0.4` without the leading `v`. Using `:v3.0.4` fails with `manifest unknown`.
+
 ## Network paths
 
 RuTracker uses two Prowlarr indexer proxies at the same time:
