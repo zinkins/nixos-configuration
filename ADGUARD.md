@@ -1,6 +1,6 @@
 # AdGuard Home DNS filtering
 
-AdGuard Home is the DNS resolver for LAN clients. It listens on TCP/UDP port 53 and blocks unwanted domains before forwarding allowed queries upstream.
+AdGuard Home is the DNS resolver for LAN clients. It listens on TCP/UDP port 53, applies network-wide filtering, and forwards allowed public queries to encrypted upstream DNS.
 
 Admin UI:
 
@@ -22,35 +22,33 @@ The NixOS configuration enables:
 - HaGeZi TIF Mini for malware, phishing and other threat-intelligence domains;
 - HaGeZi NSFW for adult domains;
 - Quad9 over DNS-over-TLS as the external upstream resolver;
-- EDNS Client Subnet disabled for better privacy;
+- EDNS Client Subnet disabled;
 - a 16 MiB DNS cache;
 - seven days of query-log retention and 30 days of statistics.
 
-The `.home` zone never goes to an external resolver. AdGuard Home forwards it to the local dnsmasq instance on `127.0.0.1:5353`.
+The `.home` zone never goes to a public resolver. AdGuard Home forwards it to the local dnsmasq instance on `127.0.0.1:5353`.
 
 ## Authentication
 
-The admin UI has an AdGuard Home user named:
+The admin UI user is:
 
 ```text
 sergey
 ```
 
-Only a BCrypt password hash is stored in the public Git repository. Keep the plaintext password outside Git.
+Only the BCrypt password hash is stored in Git. Keep the plaintext password outside the repository.
 
-If the password ever needs to be changed, generate a new BCrypt hash locally and replace only `services.adguardhome.settings.users[0].password` in `adguard.nix`.
-
-For example on NixOS:
+To change it, generate a new BCrypt hash and replace `services.adguardhome.settings.users[0].password` in `adguard.nix`:
 
 ```bash
 nix shell nixpkgs#apacheHttpd -c htpasswd -bnBC 12 sergey 'NEW-STRONG-PASSWORD'
 ```
 
-Copy only the part after `sergey:` into `adguard.nix`.
+Copy only the part after `sergey:`.
 
 ## Router configuration
 
-The TP-Link Archer AX73 should advertise the NixOS server as DNS to DHCP clients:
+The TP-Link Archer AX73 should advertise the NixOS server as DNS through DHCP:
 
 ```text
 Advanced -> Network -> DHCP Server
@@ -58,13 +56,55 @@ Primary DNS   = <NixOS server LAN IPv4>
 Secondary DNS = empty
 ```
 
-Reserve the NixOS server's LAN address in the router so the DNS address does not change.
+Reserve the server's LAN address in the router so it does not change.
 
-Do not configure a public Secondary DNS, because clients are free to use it and bypass AdGuard filtering.
+Do not configure a public Secondary DNS. Clients may use it instead of AdGuard and then `.home` names and filtering become unreliable.
 
-If IPv6 is enabled, also ensure the router is not advertising an unrelated IPv6 DNS resolver. Either advertise the NixOS DNS service over IPv6 as well or disable IPv6 DNS distribution until that path is configured.
+After changing DHCP DNS, renew the client's lease or reconnect it to the network.
 
-## Verify services
+On Windows verify the active adapter:
+
+```powershell
+ipconfig /all
+nslookup adguard.home
+```
+
+The DNS server shown by Windows should be the NixOS server.
+
+## Browser Secure DNS / DoH
+
+Browsers can bypass the operating-system DNS configuration. If Chrome, Edge, Firefox, or another browser is configured to use Cloudflare, OpenDNS, Google, or another explicit DNS-over-HTTPS provider, public names may work while `*.home` fails in the browser.
+
+For LAN names and AdGuard filtering to work consistently, disable the browser's explicit Secure DNS provider or configure it to use the system/current provider.
+
+The same applies to operating-system features such as Android Private DNS and manually configured DoH on Windows.
+
+## Clients running a VPN
+
+A client-side VPN can also prevent access to the LAN DNS server even when DHCP is correct. The VPN must allow the local LAN subnet and the NixOS DNS address outside the tunnel.
+
+For the current home network this means allowing the LAN route, for example:
+
+```text
+192.168.1.0/24
+```
+
+If the VPN has a DNS kill switch, add the NixOS DNS server address as a DNS exception as well. Use the server's actual reserved LAN address rather than a public DNS server.
+
+A useful Windows test while the VPN is enabled is:
+
+```powershell
+Test-NetConnection <SERVER_IP> -Port 53
+nslookup adguard.home <SERVER_IP>
+```
+
+If those fail with the VPN enabled but work when it is disabled, the problem is client-side VPN routing/kill-switch policy rather than AdGuard Home.
+
+## IPv6
+
+If IPv6 is enabled, ensure the router is not advertising an unrelated IPv6 DNS resolver that bypasses AdGuard. Either distribute the NixOS resolver over IPv6 as well or stop advertising another IPv6 DNS service until that path is intentionally configured.
+
+## Verify services on the server
 
 ```bash
 systemctl status adguardhome dnsmasq caddy --no-pager
@@ -74,13 +114,13 @@ ss -lntup | grep -E ':(53|80|3000|5353)\b'
 Expected layout:
 
 ```text
-:53                 AdGuard Home, LAN DNS
-127.0.0.1:5353      dnsmasq, .home only
+0.0.0.0:53          AdGuard Home, LAN DNS
+127.0.0.1:5353      dnsmasq, authoritative .home helper
 127.0.0.1:3000      AdGuard Home Web UI
-:80                 Caddy
+0.0.0.0:80          Caddy LAN HTTP entry point
 ```
 
-Test local and external DNS separately:
+Test local and public DNS separately:
 
 ```bash
 dig @127.0.0.1 -p 5353 adguard.home
@@ -88,10 +128,16 @@ dig @127.0.0.1 adguard.home
 dig @127.0.0.1 example.com
 ```
 
-Open `http://adguard.home` and use Query Log to confirm that LAN devices are sending DNS requests through the server and that blocked requests are being filtered.
+From another LAN client, explicitly query the server to separate DNS-server reachability from DHCP configuration:
+
+```text
+nslookup adguard.home <SERVER_IP>
+```
+
+Open `http://adguard.home` and use **Query Log** to confirm that LAN clients are actually sending their DNS traffic through AdGuard Home.
 
 ## Important limitations
 
-DNS filtering blocks domains, not individual HTTPS resources. It therefore cannot reliably remove advertisements served from the same domains as desired content, such as many YouTube ads.
+DNS filtering blocks domains, not individual HTTPS resources. It cannot reliably remove advertisements served from the same domains as desired content, such as many YouTube ads.
 
-A client can also bypass network DNS filtering if it uses its own DNS-over-HTTPS, Private DNS, VPN, or another manually configured resolver. Preventing deliberate bypass requires additional router/firewall policy and is separate from AdGuard Home itself.
+Any client that deliberately uses its own DoH/Private DNS/VPN resolver can bypass network DNS filtering unless router/firewall policy explicitly prevents that bypass.
