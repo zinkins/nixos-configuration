@@ -12,6 +12,10 @@ in
     httpsPort = null;
 
     virtualHosts = {
+      "http://family.${localDomain}".extraConfig = ''
+        reverse_proxy 127.0.0.1:8082
+      '';
+
       "http://prowlarr.${localDomain}".extraConfig = ''
         reverse_proxy 127.0.0.1:9696
       '';
