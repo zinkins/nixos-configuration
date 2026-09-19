@@ -193,6 +193,13 @@ in
               href = "http://qbittorrent.home";
               description = "Загрузки";
               siteMonitor = "http://127.0.0.1:8080";
+              widget = {
+                type = "qbittorrent";
+                url = "http://127.0.0.1:8080";
+                fields = [ "leech" "download" "seed" "upload" ];
+                enableLeechProgress = true;
+                enableLeechSize = true;
+              };
             };
           }
           {
