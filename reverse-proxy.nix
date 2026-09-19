@@ -23,8 +23,12 @@ in
       "http://qbittorrent.${localDomain}".extraConfig = ''
         reverse_proxy 127.0.0.1:8080 {
           # qBittorrent validates Host by default. Keep the upstream Host local
-          # while Caddy still supplies X-Forwarded-* headers for the client.
+          # and make the browser origin headers match it. qBittorrent checks
+          # Host, Origin and Referer for requests for Web UI assets and returns
+          # 401 when Caddy only rewrites Host.
           header_up Host 127.0.0.1:8080
+          header_up Origin http://127.0.0.1:8080
+          header_up Referer http://127.0.0.1:8080/
         }
       '';
 
