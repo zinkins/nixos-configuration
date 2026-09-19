@@ -13,6 +13,7 @@
       ./media.nix
       ./adguard.nix
       ./reverse-proxy.nix
+      ./homepage.nix
       ./ai-vpn.nix
       ./byparr.nix
       ./auto-update.nix
