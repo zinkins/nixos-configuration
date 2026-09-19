@@ -360,14 +360,15 @@ in
   systemd.services.family-status = {
     description = "Loopback status API for family.home";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network.target" "zfs.target" ];
+    after = [ "network.target" ];
 
+    # zpool queries /dev/zfs, so this service stays root while the endpoint is
+    # constrained to loopback and the unit is otherwise strongly hardened.
     serviceConfig = {
       Type = "simple";
       ExecStart = "${pkgs.python3}/bin/python ${familyStatusApi}";
       Restart = "on-failure";
       RestartSec = 2;
-      DynamicUser = true;
       NoNewPrivileges = true;
       PrivateTmp = true;
       ProtectHome = true;
