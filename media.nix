@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ lib, pkgs, ... }:
 
 let
   mediaPath = "/myraid1/nas/films";
@@ -8,6 +8,23 @@ in
 {
   # Shared group: qBittorrent writes the files and Jellyfin reads them.
   users.groups.media = { };
+
+  # Intel N100 (Alder Lake-N) media stack for Jellyfin Quick Sync Video.
+  # Direct Play remains preferred; QSV is used only when Jellyfin needs to
+  # transcode video for a client.
+  hardware.graphics = {
+    enable = true;
+    extraPackages = with pkgs; [
+      intel-media-driver
+      vpl-gpu-rt
+      intel-compute-runtime
+    ];
+  };
+
+  users.users.jellyfin.extraGroups = [
+    "render"
+    "video"
+  ];
 
   # Manual torrent search / indexer management.
   # LAN Web access is exposed through Caddy at http://prowlarr.home.
@@ -72,6 +89,41 @@ EOF
     enable = true;
     group = "media";
     openFirewall = true;
+
+    # Intel N100 exposes its Gen12 media engine through renderD128.
+    hardwareAcceleration = {
+      enable = true;
+      type = "qsv";
+      device = "/dev/dri/renderD128";
+    };
+
+    # Jellyfin has already been initialized on this host, so make the NixOS
+    # transcoding configuration authoritative instead of leaving the existing
+    # encoding.xml untouched.
+    forceEncodingConfig = true;
+
+    transcoding = {
+      enableHardwareEncoding = true;
+      enableIntelLowPowerEncoding = true;
+      enableToneMapping = true;
+
+      hardwareDecodingCodecs = {
+        h264 = true;
+        hevc = true;
+        hevc10bit = true;
+        mpeg2 = true;
+        vp9 = true;
+        av1 = true;
+      };
+
+      # Alder Lake-N can hardware-encode H.264 and HEVC; H.264 is always
+      # enabled by the NixOS Jellyfin module, while AV1 encoding is not
+      # supported by the N100 media engine.
+      hardwareEncodingCodecs = {
+        hevc = true;
+        av1 = false;
+      };
+    };
   };
 
   systemd.services.jellyfin.unitConfig.RequiresMountsFor = [ mediaPath ];
