@@ -9,7 +9,7 @@ in
   environment.systemPackages = [ pkgs.dnsutils ];
 
   # dnsmasq is kept only as the authoritative resolver for the local .home
-  # zone.  It no longer listens on LAN port 53; AdGuard Home is the only DNS
+  # zone. It no longer listens on LAN port 53; AdGuard Home is the only DNS
   # server exposed to clients.
   services.dnsmasq = {
     enable = true;
@@ -27,24 +27,37 @@ in
 
   systemd.services.dnsmasq = {
     wants = [ "network-online.target" ];
-    after = [ "network-online.target" ];
+    after = [ "NetworkManager.service" "network-online.target" ];
 
     # Generate local DNS records from the interface carrying the IPv4 default
-    # route so the LAN address does not have to be hard-coded in Git.
+    # route so the LAN address does not have to be hard-coded in Git. During
+    # boot NetworkManager may publish network-online.target just before the
+    # DHCP/default route becomes visible, so retry briefly instead of failing
+    # the DNS stack for the rest of the boot.
     preStart = lib.mkBefore ''
-      lan_if="$(${pkgs.iproute2}/bin/ip -4 route show default | ${pkgs.gawk}/bin/awk '
-        NR == 1 {
-          for (i = 1; i <= NF; i++) {
-            if ($i == "dev") {
-              print $(i + 1)
-              exit
+      lan_if=""
+      for attempt in $(seq 1 30); do
+        lan_if="$(${pkgs.iproute2}/bin/ip -4 route show default | ${pkgs.gawk}/bin/awk '
+          NR == 1 {
+            for (i = 1; i <= NF; i++) {
+              if ($i == "dev") {
+                print $(i + 1)
+                exit
+              }
             }
           }
-        }
-      ')"
+        ')"
+
+        if [ -n "$lan_if" ]; then
+          break
+        fi
+
+        echo "Waiting for an IPv4 default route ($attempt/30)..." >&2
+        sleep 1
+      done
 
       if [ -z "$lan_if" ]; then
-        echo "Cannot determine LAN interface from the IPv4 default route" >&2
+        echo "Cannot determine LAN interface from the IPv4 default route after 30 seconds" >&2
         exit 1
       fi
 
@@ -57,6 +70,11 @@ interface-name=jellyfin.${localDomain},$lan_if/4
 interface-name=adguard.${localDomain},$lan_if/4
 EOF
     '';
+
+    serviceConfig = {
+      Restart = "on-failure";
+      RestartSec = 5;
+    };
   };
 
   services.adguardhome = {
@@ -72,7 +90,7 @@ EOF
     mutableSettings = true;
 
     settings = {
-      # AdGuard Home stores only the BCrypt hash.  The plaintext password is
+      # AdGuard Home stores only the BCrypt hash. The plaintext password is
       # intentionally not committed to this public repository.
       users = [
         {
@@ -123,7 +141,7 @@ EOF
       };
 
       # Balanced lists for a home network: ads/tracking, malware/phishing, and
-      # adult content.  The TIF Mini variant avoids the very large memory cost
+      # adult content. The TIF Mini variant avoids the very large memory cost
       # of the full HaGeZi threat-intelligence list.
       filters = [
         {
