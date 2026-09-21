@@ -28,6 +28,9 @@
   boot.supportedFilesystems = [ "zfs" ];
   boot.zfs.forceImportRoot = false;
   boot.zfs.extraPools = [ "myraid1" ];
+  boot.extraModprobeConfig = ''
+    options zfs zfs_arc_max=8589934592
+  '';
 
   networking.hostName = "nixos"; # Define your hostname.
   networking.hostId = "1b6caf20";
