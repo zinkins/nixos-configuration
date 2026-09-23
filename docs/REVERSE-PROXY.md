@@ -111,7 +111,7 @@ Jellyfin keeps its own NixOS firewall openings because DLNA clients need direct 
 
 The reverse proxy is independent from outbound media routing.
 
-Homepage's outbound HTTPS requests, including the Open-Meteo weather widget, use the existing loopback SOCKS5 VPN proxy. Homepage starts after the proxy when available, while its local service widgets continue to use loopback. If weather shows an API error, check `media-vpn-proxy` and test the proxy path with `curl -I --socks5-hostname 127.0.0.1:1080 https://api.open-meteo.com/` on the server. A response from the API, including HTTP 400 for its bare root URL, confirms connectivity.
+Homepage's outbound HTTPS requests, including the Open-Meteo weather widget, use the loopback SOCKS5 VPN proxy via an HTTP bridge. Node's `NODE_USE_ENV_PROXY` only understands `http(s)://` proxy URLs, not `socks5://`, so `homepage-http-proxy` (privoxy) forwards plain HTTP on `127.0.0.1:8118` into the SOCKS5 proxy on `127.0.0.1:1080`; homepage's `HTTPS_PROXY` points at the bridge. Homepage starts after both services, while its local service widgets continue to use loopback directly (`NO_PROXY`). If weather shows an API error, check `media-vpn-proxy` and `homepage-http-proxy`, and test the full path with `curl -I --proxy http://127.0.0.1:8118 https://api.open-meteo.com/` on the server. A response from the API, including HTTP 400 for its bare root URL, confirms connectivity.
 
 Prowlarr can send selected indexer requests through the localhost SOCKS5 service `127.0.0.1:1080`, which exits through AmneziaWG. Cloudflare-protected indexers can additionally use Byparr at `127.0.0.1:8191`; Byparr's browser is itself forced through the same SOCKS5 endpoint.
 
