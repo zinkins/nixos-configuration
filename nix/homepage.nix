@@ -401,7 +401,12 @@ in
   };
 
   systemd.services.homepage-dashboard = {
-    wants = [ "family-status.service" ];
-    after = [ "family-status.service" ];
+    wants = [ "family-status.service" "media-vpn-proxy.service" ];
+    after = [ "family-status.service" "media-vpn-proxy.service" ];
+    environment = {
+      NODE_USE_ENV_PROXY = "1";
+      HTTPS_PROXY = "socks5://127.0.0.1:1080";
+      NO_PROXY = "127.0.0.1,localhost";
+    };
   };
 }
