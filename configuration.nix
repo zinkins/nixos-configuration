@@ -17,6 +17,7 @@
       ./ai-vpn.nix
       ./byparr.nix
       ./auto-update.nix
+      ./home-vpn.nix
     ];
 
   # Use the systemd-boot EFI boot loader.

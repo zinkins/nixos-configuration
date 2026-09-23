@@ -37,6 +37,7 @@ Preserve these unless the task explicitly changes the architecture:
 - [`AI-VPN.md`](AI-VPN.md)
 - [`AUTO-UPDATE.md`](AUTO-UPDATE.md)
 - [`BYPARR.md`](BYPARR.md)
+- [`HOME-VPN.md`](HOME-VPN.md)
 - [`MEDIA-SETUP.md`](MEDIA-SETUP.md)
 - [`REVERSE-PROXY.md`](REVERSE-PROXY.md)
 
@@ -55,6 +56,7 @@ Preserve these unless the task explicitly changes the architecture:
 - [`ai-vpn.nix`](ai-vpn.nix)
 - [`byparr.nix`](byparr.nix)
 - [`auto-update.nix`](auto-update.nix)
+- [`home-vpn.nix`](home-vpn.nix)
 
 ## Repository automation and metadata
 
