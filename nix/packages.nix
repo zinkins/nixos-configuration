@@ -11,6 +11,6 @@
     jq
     tree
 
-    # Codex and Claude Code are provided by ai-vpn.nix as VPN-only wrappers.
+    herdr
   ];
 }
