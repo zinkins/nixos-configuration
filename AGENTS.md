@@ -15,6 +15,7 @@ Do not duplicate subsystem documentation here: follow the linked files as the so
 - Never add or repeat personal information, credentials, tokens, private keys, private VPN configuration, account data, or sensitive diagnostic output.
 - Do not copy user-specific values from existing source files into new documentation, comments, examples, issues, or commit messages.
 - Use CI as the baseline validation contract; do not claim host/runtime validation unless it was actually performed.
+- Deployment is via PR merge, not manual host commands: the server auto-pulls and applies `master` on its own (see [`docs/AUTO-UPDATE.md`](docs/AUTO-UPDATE.md)). Never run `nixos-rebuild switch`, `git push`/merge to `master`, or other apply/deploy commands directly on the host or repo on the user's behalf — open a PR and let the user merge it, then the existing `nixos-config-sync.timer` rolls it out within ~15 minutes. Diagnostic reads on the host (`systemctl status`, `journalctl`, `curl`, etc.) are fine.
 
 ## Architectural invariants
 
