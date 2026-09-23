@@ -2,12 +2,15 @@
 
 The server provides friendly LAN URLs through Caddy:
 
+- `http://family.home` — Homepage dashboard
 - `http://prowlarr.home`
 - `http://qbittorrent.home`
 - `http://jellyfin.home`
 - `http://adguard.home`
 
 `nixos.home` is also published in local DNS as the server name.
+
+The electronic diary tile on `family.home` shows a locally saved timetable and homework. Clicking it opens `https://school.nso.ru/journal-app/`. See `SCHOOL-DIARY.md` for one-click updates from Yandex Browser and the data stored on the server.
 
 Use the explicit `http://` scheme. This LAN setup intentionally does not enable HTTPS, avoiding local CA/certificate installation and compatibility problems with older devices.
 
@@ -99,6 +102,7 @@ Caddy listens on TCP port 80.
 8191         Byparr API             loopback only
 9696         Prowlarr Web UI        not directly opened to LAN
 8080         qBittorrent Web UI     not directly opened to LAN
+8084         School diary cache     loopback only
 ```
 
 Jellyfin keeps its own NixOS firewall openings because DLNA clients need direct service discovery/media access. Browser access should still use `http://jellyfin.home`.

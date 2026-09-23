@@ -40,6 +40,7 @@ Preserve these unless the task explicitly changes the architecture:
 - [`docs/HOME-VPN.md`](docs/HOME-VPN.md)
 - [`docs/MEDIA-SETUP.md`](docs/MEDIA-SETUP.md)
 - [`docs/REVERSE-PROXY.md`](docs/REVERSE-PROXY.md)
+- [`docs/SCHOOL-DIARY.md`](docs/SCHOOL-DIARY.md)
 
 ## NixOS configuration index
 
@@ -51,6 +52,7 @@ Preserve these unless the task explicitly changes the architecture:
 - [`nix/adguard.nix`](nix/adguard.nix)
 - [`nix/reverse-proxy.nix`](nix/reverse-proxy.nix)
 - [`nix/homepage.nix`](nix/homepage.nix)
+- [`nix/school-diary.nix`](nix/school-diary.nix)
 - [`nix/media.nix`](nix/media.nix)
 - [`nix/amnezia.nix`](nix/amnezia.nix)
 - [`nix/ai-vpn.nix`](nix/ai-vpn.nix)

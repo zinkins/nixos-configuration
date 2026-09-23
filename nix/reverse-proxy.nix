@@ -13,7 +13,12 @@ in
 
     virtualHosts = {
       "http://family.${localDomain}".extraConfig = ''
-        reverse_proxy 127.0.0.1:8082
+        handle_path /school-diary/* {
+          reverse_proxy 127.0.0.1:8084
+        }
+        handle {
+          reverse_proxy 127.0.0.1:8082
+        }
       '';
 
       "http://prowlarr.${localDomain}".extraConfig = ''

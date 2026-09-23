@@ -283,7 +283,20 @@ in
           {
             "Электронный дневник" = {
               icon = "mdi-school";
-              description = "Расписание, задания и оценки — подключим позже";
+              href = "https://school.nso.ru/journal-app/";
+              description = "Уроки и домашние задания";
+              widget = {
+                type = "customapi";
+                url = "http://127.0.0.1:8084/data";
+                refreshInterval = 60000;
+                display = "dynamic-list";
+                mappings = {
+                  items = "items";
+                  name = "name";
+                  label = "label";
+                  limit = 10;
+                };
+              };
             };
           }
           {
