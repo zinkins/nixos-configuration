@@ -14,8 +14,8 @@
         inherit system;
         specialArgs = { inherit inputs; };
         modules = [
-          ./configuration.nix
-          ./amnezia.nix
+          ./nix/configuration.nix
+          ./nix/amnezia.nix
         ];
       };
     };
