@@ -3,6 +3,20 @@
 let
   homepagePort = 8082;
   statusPort = 8083;
+  httpProxyPort = 8118;
+
+  # Node's env-proxy support (NODE_USE_ENV_PROXY) only understands http(s)
+  # proxy URLs, not socks5://, so it silently ignores a SOCKS proxy and
+  # connects directly. Privoxy bridges plain HTTP to the loopback SOCKS5
+  # VPN proxy so homepage's outbound fetches actually go through it.
+  privoxyConfig = pkgs.writeText "homepage-http-proxy.conf" ''
+    listen-address 127.0.0.1:${toString httpProxyPort}
+    toggle 1
+    enable-remote-toggle 0
+    enable-edit-actions 0
+    enforce-blocks 0
+    forward-socks5t / 127.0.0.1:1080 .
+  '';
 
   familyStatusApi = pkgs.writeText "family-status.py" ''
     import json
@@ -400,12 +414,35 @@ in
     };
   };
 
+  systemd.services.homepage-http-proxy = {
+    description = "HTTP-to-SOCKS5 bridge for homepage's outbound HTTPS requests";
+    wantedBy = [ "multi-user.target" ];
+    requires = [ "media-vpn-proxy.service" ];
+    after = [ "media-vpn-proxy.service" ];
+
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${pkgs.privoxy}/bin/privoxy --no-daemon ${privoxyConfig}";
+      Restart = "on-failure";
+      RestartSec = 2;
+      DynamicUser = true;
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      ProtectHome = true;
+      ProtectSystem = "strict";
+      ProtectKernelTunables = true;
+      ProtectKernelModules = true;
+      ProtectControlGroups = true;
+      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+    };
+  };
+
   systemd.services.homepage-dashboard = {
-    wants = [ "family-status.service" "media-vpn-proxy.service" ];
-    after = [ "family-status.service" "media-vpn-proxy.service" ];
+    wants = [ "family-status.service" "homepage-http-proxy.service" ];
+    after = [ "family-status.service" "homepage-http-proxy.service" ];
     environment = {
       NODE_USE_ENV_PROXY = "1";
-      HTTPS_PROXY = "socks5://127.0.0.1:1080";
+      HTTPS_PROXY = "http://127.0.0.1:${toString httpProxyPort}";
       NO_PROXY = "127.0.0.1,localhost";
     };
   };
