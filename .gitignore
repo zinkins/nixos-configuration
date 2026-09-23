@@ -1,3 +1,4 @@
 # Nix/NixOS build result symlinks
 result
 result-*
+awg0.conf
