@@ -3,6 +3,8 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    # Not in nixpkgs; built from the upstream flake (needs its own nixpkgs for zig_0_16).
+    herdr.url = "github:herdrdev/herdr/v0.9.1";
   };
 
   outputs = { self, nixpkgs, ... }@inputs:

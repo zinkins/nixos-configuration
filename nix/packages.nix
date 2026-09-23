@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, inputs, ... }:
 
 {
   environment.systemPackages = with pkgs; [
@@ -10,7 +10,8 @@
     ripgrep
     jq
     tree
+    inputs.herdr.packages.${pkgs.stdenv.hostPlatform.system}.herdr
 
-    herdr
+    # Codex and Claude Code are provided by ai-vpn.nix as VPN-only wrappers.
   ];
 }
