@@ -38,7 +38,7 @@ sergey
 
 Only the BCrypt password hash is stored in Git. Keep the plaintext password outside the repository.
 
-To change it, generate a new BCrypt hash and replace `services.adguardhome.settings.users[0].password` in `adguard.nix`:
+To change it, generate a new BCrypt hash and replace `services.adguardhome.settings.users[0].password` in [`../nix/adguard.nix`](../nix/adguard.nix):
 
 ```bash
 nix shell nixpkgs#apacheHttpd -c htpasswd -bnBC 12 sergey 'NEW-STRONG-PASSWORD'

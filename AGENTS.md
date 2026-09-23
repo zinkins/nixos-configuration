@@ -8,7 +8,7 @@ Do not duplicate subsystem documentation here: follow the linked files as the so
 - Treat `master` as production/deployable state; keep every change buildable and reversible.
 - Prefer **maximum declarativity**: express desired state in NixOS modules instead of manual host changes, imperative setup, or undocumented runtime state.
 - When imperative logic is unavoidable, keep it minimal, idempotent, explicit, and owned by a declarative systemd/NixOS definition.
-- Prefer a dedicated module for a new subsystem instead of growing `configuration.nix` indefinitely.
+- Prefer a dedicated module for a new subsystem instead of growing `nix/configuration.nix` indefinitely.
 - Make the smallest focused change; avoid unrelated refactors, especially around networking, VPN, firewall, storage, boot, SSH, and deployment.
 - Read the relevant documentation and module before changing a subsystem; inspect adjacent modules when a change crosses subsystem boundaries.
 - If behavior or operator steps change, update the corresponding documentation in the same change.
@@ -33,30 +33,30 @@ Preserve these unless the task explicitly changes the architecture:
 
 ## Documentation index
 
-- [`ADGUARD.md`](ADGUARD.md)
-- [`AI-VPN.md`](AI-VPN.md)
-- [`AUTO-UPDATE.md`](AUTO-UPDATE.md)
-- [`BYPARR.md`](BYPARR.md)
-- [`HOME-VPN.md`](HOME-VPN.md)
-- [`MEDIA-SETUP.md`](MEDIA-SETUP.md)
-- [`REVERSE-PROXY.md`](REVERSE-PROXY.md)
+- [`docs/ADGUARD.md`](docs/ADGUARD.md)
+- [`docs/AI-VPN.md`](docs/AI-VPN.md)
+- [`docs/AUTO-UPDATE.md`](docs/AUTO-UPDATE.md)
+- [`docs/BYPARR.md`](docs/BYPARR.md)
+- [`docs/HOME-VPN.md`](docs/HOME-VPN.md)
+- [`docs/MEDIA-SETUP.md`](docs/MEDIA-SETUP.md)
+- [`docs/REVERSE-PROXY.md`](docs/REVERSE-PROXY.md)
 
 ## NixOS configuration index
 
-- [`flake.nix`](flake.nix)
-- [`configuration.nix`](configuration.nix)
-- [`hardware-configuration.nix`](hardware-configuration.nix)
-- [`packages.nix`](packages.nix)
-- [`networking.nix`](networking.nix)
-- [`adguard.nix`](adguard.nix)
-- [`reverse-proxy.nix`](reverse-proxy.nix)
-- [`homepage.nix`](homepage.nix)
-- [`media.nix`](media.nix)
-- [`amnezia.nix`](amnezia.nix)
-- [`ai-vpn.nix`](ai-vpn.nix)
-- [`byparr.nix`](byparr.nix)
-- [`auto-update.nix`](auto-update.nix)
-- [`home-vpn.nix`](home-vpn.nix)
+- [`flake.nix`](flake.nix) — flake entry point.
+- [`nix/configuration.nix`](nix/configuration.nix) — main host module.
+- [`nix/hardware-configuration.nix`](nix/hardware-configuration.nix) — generated hardware baseline.
+- [`nix/packages.nix`](nix/packages.nix)
+- [`nix/networking.nix`](nix/networking.nix)
+- [`nix/adguard.nix`](nix/adguard.nix)
+- [`nix/reverse-proxy.nix`](nix/reverse-proxy.nix)
+- [`nix/homepage.nix`](nix/homepage.nix)
+- [`nix/media.nix`](nix/media.nix)
+- [`nix/amnezia.nix`](nix/amnezia.nix)
+- [`nix/ai-vpn.nix`](nix/ai-vpn.nix)
+- [`nix/byparr.nix`](nix/byparr.nix)
+- [`nix/auto-update.nix`](nix/auto-update.nix)
+- [`nix/home-vpn.nix`](nix/home-vpn.nix)
 
 ## Repository automation and metadata
 
@@ -64,5 +64,7 @@ Preserve these unless the task explicitly changes the architecture:
 - [`.github/dependabot.yml`](.github/dependabot.yml) — dependency update configuration.
 - [`flake.lock`](flake.lock) — pinned flake inputs; update intentionally, not by hand-editing.
 - [`.gitignore`](.gitignore) — repository ignore rules.
+
+Keep operator documentation under `docs/` and NixOS modules under `nix/`. Root-level files should remain limited to repository/tooling entry points.
 
 When documentation and implementation disagree, inspect the current NixOS configuration as the executable source of truth and update stale documentation together with the code change.
