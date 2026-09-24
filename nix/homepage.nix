@@ -464,13 +464,31 @@ in
   # Locally-generated connections to Open-Meteo get transparently rewritten
   # to homepage-redsocks; everything else is untouched. Scoped to this one
   # destination IP:port so no other traffic on the host is affected.
+  #
+  # The rule lives in its own chain that gets unconditionally flushed and
+  # rebuilt on every run, rather than a bare "iptables -D <exact rule> || true"
+  # before the -A: `-D` only matches an *exact* rule spec, so any past edit to
+  # this rule's flags leaves the previous variant stuck in the table forever
+  # (silently, since the delete is swallowed by `|| true`) — which is exactly
+  # what caused a REDIRECT loop in practice: media-vpn-proxy's own outbound
+  # connect() (source-bound to vpnTunnelIp) kept matching a stale rule that
+  # predated the "! -s vpnTunnelIp" exclusion below.
   networking.firewall.extraCommands = ''
-    # firewall-start reruns on every switch without flushing the top-level nat
-    # OUTPUT chain, so delete any rule from a previous run before re-adding it.
+    # One-time cleanup of exact-match rules from earlier revisions of this
+    # fix that predate the dedicated chain below.
+    iptables -t nat -D OUTPUT -p tcp -d ${openMeteoIp} --dport 443 -j REDIRECT --to-port ${toString redsocksPort} 2>/dev/null || true
     iptables -t nat -D OUTPUT -p tcp -d ${openMeteoIp} --dport 443 ! -s ${vpnTunnelIp} -j REDIRECT --to-port ${toString redsocksPort} 2>/dev/null || true
-    iptables -t nat -A OUTPUT -p tcp -d ${openMeteoIp} --dport 443 ! -s ${vpnTunnelIp} -j REDIRECT --to-port ${toString redsocksPort}
+
+    iptables -t nat -N homepage-weather-redirect 2>/dev/null || true
+    iptables -t nat -F homepage-weather-redirect
+    iptables -t nat -A homepage-weather-redirect -p tcp -d ${openMeteoIp} --dport 443 ! -s ${vpnTunnelIp} -j REDIRECT --to-port ${toString redsocksPort}
+
+    iptables -t nat -D OUTPUT -j homepage-weather-redirect 2>/dev/null || true
+    iptables -t nat -A OUTPUT -j homepage-weather-redirect
   '';
   networking.firewall.extraStopCommands = ''
-    iptables -t nat -D OUTPUT -p tcp -d ${openMeteoIp} --dport 443 ! -s ${vpnTunnelIp} -j REDIRECT --to-port ${toString redsocksPort} 2>/dev/null || true
+    iptables -t nat -D OUTPUT -j homepage-weather-redirect 2>/dev/null || true
+    iptables -t nat -F homepage-weather-redirect 2>/dev/null || true
+    iptables -t nat -X homepage-weather-redirect 2>/dev/null || true
   '';
 }
