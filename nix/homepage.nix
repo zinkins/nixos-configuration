@@ -3,19 +3,32 @@
 let
   homepagePort = 8082;
   statusPort = 8083;
-  httpProxyPort = 8118;
+  redsocksPort = 12345;
 
-  # Node's env-proxy support (NODE_USE_ENV_PROXY) only understands http(s)
-  # proxy URLs, not socks5://, so it silently ignores a SOCKS proxy and
-  # connects directly. Privoxy bridges plain HTTP to the loopback SOCKS5
-  # VPN proxy so homepage's outbound fetches actually go through it.
-  privoxyConfig = pkgs.writeText "homepage-http-proxy.conf" ''
-    listen-address 127.0.0.1:${toString httpProxyPort}
-    toggle 1
-    enable-remote-toggle 0
-    enable-edit-actions 0
-    enforce-blocks 0
-    forward-socks5t / 127.0.0.1:1080 .
+  # api.open-meteo.com's only A record. Our upstream ISP blocks this Hetzner
+  # range directly, and homepage's own weather-widget HTTP client is a raw
+  # https.Agent request with no proxy support of any kind (no HTTPS_PROXY,
+  # no NODE_USE_ENV_PROXY — those only affect the global fetch(), which this
+  # widget doesn't use). So the only way to route it through the loopback
+  # SOCKS5 VPN proxy is a transparent redirect below the application: iptables
+  # sends locally-generated connections to this IP:443 into redsocks, which
+  # relays them over the SOCKS5 proxy without homepage knowing a proxy exists.
+  openMeteoIp = "94.130.142.35";
+
+  redsocksConfig = pkgs.writeText "homepage-redsocks.conf" ''
+    base {
+      log_debug = off;
+      log_info = off;
+      daemon = off;
+      redirector = iptables;
+    }
+    redsocks {
+      local_ip = 127.0.0.1;
+      local_port = ${toString redsocksPort};
+      ip = 127.0.0.1;
+      port = 1080;
+      type = socks5;
+    }
   '';
 
   familyStatusApi = pkgs.writeText "family-status.py" ''
@@ -414,15 +427,15 @@ in
     };
   };
 
-  systemd.services.homepage-http-proxy = {
-    description = "HTTP-to-SOCKS5 bridge for homepage's outbound HTTPS requests";
+  systemd.services.homepage-redsocks = {
+    description = "Transparent SOCKS5 redirector for homepage's Open-Meteo requests";
     wantedBy = [ "multi-user.target" ];
     requires = [ "media-vpn-proxy.service" ];
     after = [ "media-vpn-proxy.service" ];
 
     serviceConfig = {
       Type = "simple";
-      ExecStart = "${pkgs.privoxy}/bin/privoxy --no-daemon ${privoxyConfig}";
+      ExecStart = "${pkgs.redsocks}/bin/redsocks -c ${redsocksConfig}";
       Restart = "on-failure";
       RestartSec = 2;
       DynamicUser = true;
@@ -438,12 +451,20 @@ in
   };
 
   systemd.services.homepage-dashboard = {
-    wants = [ "family-status.service" "homepage-http-proxy.service" ];
-    after = [ "family-status.service" "homepage-http-proxy.service" ];
-    environment = {
-      NODE_USE_ENV_PROXY = "1";
-      HTTPS_PROXY = "http://127.0.0.1:${toString httpProxyPort}";
-      NO_PROXY = "127.0.0.1,localhost";
-    };
+    wants = [ "family-status.service" "homepage-redsocks.service" ];
+    after = [ "family-status.service" "homepage-redsocks.service" ];
   };
+
+  # Locally-generated connections to Open-Meteo get transparently rewritten
+  # to homepage-redsocks; everything else is untouched. Scoped to this one
+  # destination IP:port so no other traffic on the host is affected.
+  networking.firewall.extraCommands = ''
+    # firewall-start reruns on every switch without flushing the top-level nat
+    # OUTPUT chain, so delete any rule from a previous run before re-adding it.
+    iptables -t nat -D OUTPUT -p tcp -d ${openMeteoIp} --dport 443 -j REDIRECT --to-port ${toString redsocksPort} 2>/dev/null || true
+    iptables -t nat -A OUTPUT -p tcp -d ${openMeteoIp} --dport 443 -j REDIRECT --to-port ${toString redsocksPort}
+  '';
+  networking.firewall.extraStopCommands = ''
+    iptables -t nat -D OUTPUT -p tcp -d ${openMeteoIp} --dport 443 -j REDIRECT --to-port ${toString redsocksPort} 2>/dev/null || true
+  '';
 }
