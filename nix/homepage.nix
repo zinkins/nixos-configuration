@@ -15,6 +15,12 @@ let
   # relays them over the SOCKS5 proxy without homepage knowing a proxy exists.
   openMeteoIp = "94.130.142.35";
 
+  # AmneziaWG's assigned tunnel address (nix/amnezia.nix binds media-vpn-proxy's
+  # outbound socket to this address so its packets hit the awg0 policy route).
+  # Without excluding it below, microsocks' own connect() to openMeteoIp would
+  # match the redirect rule too and loop back into redsocks forever.
+  vpnTunnelIp = "10.8.1.10";
+
   redsocksConfig = pkgs.writeText "homepage-redsocks.conf" ''
     base {
       log_debug = off;
@@ -461,10 +467,10 @@ in
   networking.firewall.extraCommands = ''
     # firewall-start reruns on every switch without flushing the top-level nat
     # OUTPUT chain, so delete any rule from a previous run before re-adding it.
-    iptables -t nat -D OUTPUT -p tcp -d ${openMeteoIp} --dport 443 -j REDIRECT --to-port ${toString redsocksPort} 2>/dev/null || true
-    iptables -t nat -A OUTPUT -p tcp -d ${openMeteoIp} --dport 443 -j REDIRECT --to-port ${toString redsocksPort}
+    iptables -t nat -D OUTPUT -p tcp -d ${openMeteoIp} --dport 443 ! -s ${vpnTunnelIp} -j REDIRECT --to-port ${toString redsocksPort} 2>/dev/null || true
+    iptables -t nat -A OUTPUT -p tcp -d ${openMeteoIp} --dport 443 ! -s ${vpnTunnelIp} -j REDIRECT --to-port ${toString redsocksPort}
   '';
   networking.firewall.extraStopCommands = ''
-    iptables -t nat -D OUTPUT -p tcp -d ${openMeteoIp} --dport 443 -j REDIRECT --to-port ${toString redsocksPort} 2>/dev/null || true
+    iptables -t nat -D OUTPUT -p tcp -d ${openMeteoIp} --dport 443 ! -s ${vpnTunnelIp} -j REDIRECT --to-port ${toString redsocksPort} 2>/dev/null || true
   '';
 }
