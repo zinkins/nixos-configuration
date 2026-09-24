@@ -10,7 +10,7 @@
     ripgrep
     jq
     tree
-    inputs.herdr.packages.${pkgs.stdenv.hostPlatform.system}.herdr
+    inputs.herdr-nix.packages.${pkgs.stdenv.hostPlatform.system}.herdr
 
     # Codex and Claude Code are provided by ai-vpn.nix as VPN-only wrappers.
   ];
