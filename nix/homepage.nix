@@ -138,33 +138,53 @@ in
         mobileButtonPosition = "top-right";
       };
 
-      layout = {
-        "Медиа" = {
-          style = "row";
-          columns = 1;
-          icon = "mdi-play-circle";
-        };
-        "Загрузки и сеть" = {
-          style = "row";
-          columns = 4;
-          icon = "mdi-lan";
-        };
-        "Дом" = {
-          style = "row";
-          columns = 4;
-          icon = "mdi-home-heart";
-        };
-        "Семья" = {
-          style = "row";
-          columns = 3;
-          icon = "mdi-account-group";
-        };
-        "Быстрый доступ" = {
-          style = "row";
-          columns = 4;
-          icon = "mdi-link-variant";
-        };
-      };
+      # A list, not an attrset: Nix sorts attrset keys alphabetically, and
+      # homepage orders groups by layout key order. Homepage accepts a list of
+      # single-key maps and keeps its order.
+      layout = [
+        {
+          "Погода" = {
+            style = "row";
+            columns = 1;
+            icon = "mdi-weather-partly-cloudy";
+          };
+        }
+        {
+          "Медиа" = {
+            style = "row";
+            columns = 1;
+            icon = "mdi-play-circle";
+          };
+        }
+        {
+          "Загрузки и сеть" = {
+            style = "row";
+            columns = 4;
+            icon = "mdi-lan";
+          };
+        }
+        {
+          "Семья" = {
+            style = "row";
+            columns = 3;
+            icon = "mdi-account-group";
+          };
+        }
+        {
+          "Быстрый доступ" = {
+            style = "row";
+            columns = 4;
+            icon = "mdi-link-variant";
+          };
+        }
+        {
+          "Дом" = {
+            style = "row";
+            columns = 4;
+            icon = "mdi-home-heart";
+          };
+        }
+      ];
     };
 
     widgets = [
@@ -206,6 +226,55 @@ in
     ];
 
     services = [
+      {
+        # The openmeteo info widget above only shows current conditions, so the
+        # day forecast is a customapi card on the same API host (and therefore
+        # the same VPN redirect below). hourly.temperature_2m.N is hour N of
+        # today in the given timezone, since forecast_days=1.
+        "Погода" = [
+          {
+            "Прогноз на сегодня" = {
+              icon = "mdi-weather-partly-cloudy";
+              description = "Новосибирск";
+              widget = {
+                type = "customapi";
+                url = "https://api.open-meteo.com/v1/forecast?latitude=55.0084&longitude=82.9357&timezone=Asia%2FNovosibirsk&forecast_days=1&wind_speed_unit=ms&hourly=temperature_2m&daily=temperature_2m_min,temperature_2m_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max";
+                refreshInterval = 1800000;
+                display = "list";
+                mappings = [
+                  { field = "hourly.temperature_2m.8"; label = "Утро (08:00)"; format = "number"; suffix = "°"; }
+                  { field = "hourly.temperature_2m.14"; label = "День (14:00)"; format = "number"; suffix = "°"; }
+                  { field = "hourly.temperature_2m.20"; label = "Вечер (20:00)"; format = "number"; suffix = "°"; }
+                  { field = "hourly.temperature_2m.2"; label = "Ночь (02:00)"; format = "number"; suffix = "°"; }
+                  {
+                    field = "daily.temperature_2m_min.0";
+                    label = "Мин / макс";
+                    format = "number";
+                    suffix = "°";
+                    additionalField = {
+                      field = "daily.temperature_2m_max.0";
+                      format = "number";
+                      suffix = "°";
+                    };
+                  }
+                  {
+                    field = "daily.precipitation_probability_max.0";
+                    label = "Осадки";
+                    format = "number";
+                    suffix = "%";
+                    additionalField = {
+                      field = "daily.precipitation_sum.0";
+                      format = "float";
+                      suffix = "мм";
+                    };
+                  }
+                  { field = "daily.wind_speed_10m_max.0"; label = "Ветер до"; format = "number"; suffix = "м/с"; }
+                ];
+              };
+            };
+          }
+        ];
+      }
       {
         "Медиа" = [
           {
@@ -391,21 +460,47 @@ in
       }
     ];
 
+    # High-contrast dark theme: near-black background, solid cards with a
+    # visible border, and white text instead of homepage's dimmed defaults.
     customCSS = ''
       body {
-        background:
-          radial-gradient(circle at 15% 15%, rgba(37, 99, 235, 0.20), transparent 34%),
-          radial-gradient(circle at 85% 10%, rgba(14, 116, 144, 0.14), transparent 28%),
-          linear-gradient(155deg, #07111f 0%, #0b1728 48%, #07101d 100%) !important;
+        background: linear-gradient(180deg, #02060d 0%, #050b16 100%) !important;
         background-attachment: fixed !important;
+        color: #ffffff !important;
       }
 
-      @media (max-width: 768px) {
-        body {
-          background:
-            radial-gradient(circle at 50% 0%, rgba(37, 99, 235, 0.22), transparent 32%),
-            linear-gradient(180deg, #07111f 0%, #091829 50%, #07101d 100%) !important;
-        }
+      .service-card,
+      .bookmark > a,
+      #information-widgets .widget-container {
+        background-color: #0f1b2d !important;
+        border: 1px solid #3b4f6b !important;
+        color: #ffffff !important;
+      }
+
+      .service-card:hover,
+      .bookmark > a:hover {
+        background-color: #172a45 !important;
+        border-color: #60a5fa !important;
+      }
+
+      .service-group-name,
+      .service-name,
+      .primary-text,
+      .secondary-text,
+      .bookmark-text,
+      .service-block div,
+      .widget-container div {
+        color: #ffffff !important;
+      }
+
+      .service-description,
+      .bookmark-description {
+        color: #cbd5e1 !important;
+      }
+
+      .service-block,
+      .service-card .rounded-sm {
+        background-color: #1e3150 !important;
       }
     '';
   };
