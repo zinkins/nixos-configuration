@@ -69,6 +69,8 @@ The initial configuration sets the save path to:
 /myraid1/nas/films
 ```
 
+qBittorrent runs with `UMask=0002`, so downloads are group-writable for the `media` group. This lets the Samba share rename or delete them from Windows; see `SAMBA.md`.
+
 qBittorrent may generate a temporary Web UI password on first start. If needed:
 
 ```bash

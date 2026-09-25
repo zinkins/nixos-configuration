@@ -59,6 +59,9 @@ in
   # Web UI (including the password) remain persistent across rebuilds.
   systemd.services.qbittorrent = {
     unitConfig.RequiresMountsFor = [ mediaPath ];
+    # Group-writable downloads, so media group members (the SMB user, see
+    # samba.nix) can rename or delete them.
+    serviceConfig.UMask = "0002";
     preStart = lib.mkBefore ''
       if [ ! -e ${lib.escapeShellArg qbittorrentConfig} ]; then
         umask 077
