@@ -96,6 +96,8 @@ Caddy listens on TCP port 80.
 53 TCP/UDP   AdGuard Home DNS       LAN-facing
 80 TCP       Caddy                  LAN-facing
 49160 TCP/UDP qBittorrent peers    Internet/LAN as required for torrenting
+139,445 TCP  Samba SMB              open; Samba accepts only 192.168.0.0/16
+137,138 UDP  Samba NetBIOS names    LAN-facing
 5353         dnsmasq                loopback only
 3000         AdGuard Home UI        loopback only
 1080         media VPN SOCKS5       loopback only
@@ -106,6 +108,8 @@ Caddy listens on TCP port 80.
 ```
 
 Jellyfin keeps its own NixOS firewall openings because DLNA clients need direct service discovery/media access. Browser access should still use `http://jellyfin.home`.
+
+Samba is a file share rather than a browser UI, so it also keeps its own openings and restricts clients to the LAN itself. See `SAMBA.md`.
 
 ## Media VPN and Byparr
 

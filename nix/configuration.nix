@@ -19,6 +19,7 @@
       ./byparr.nix
       ./auto-update.nix
       ./home-vpn.nix
+      ./samba.nix
     ];
 
   # Use the systemd-boot EFI boot loader.

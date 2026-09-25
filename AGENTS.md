@@ -41,6 +41,7 @@ Preserve these unless the task explicitly changes the architecture:
 - [`docs/HOME-VPN.md`](docs/HOME-VPN.md)
 - [`docs/MEDIA-SETUP.md`](docs/MEDIA-SETUP.md)
 - [`docs/REVERSE-PROXY.md`](docs/REVERSE-PROXY.md)
+- [`docs/SAMBA.md`](docs/SAMBA.md)
 - [`docs/SCHOOL-DIARY.md`](docs/SCHOOL-DIARY.md)
 
 ## NixOS configuration index
@@ -60,6 +61,7 @@ Preserve these unless the task explicitly changes the architecture:
 - [`nix/byparr.nix`](nix/byparr.nix)
 - [`nix/auto-update.nix`](nix/auto-update.nix)
 - [`nix/home-vpn.nix`](nix/home-vpn.nix)
+- [`nix/samba.nix`](nix/samba.nix)
 
 ## Repository automation and metadata
 
