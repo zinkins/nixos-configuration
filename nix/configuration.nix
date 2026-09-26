@@ -14,6 +14,8 @@
       ./adguard.nix
       ./reverse-proxy.nix
       ./homepage.nix
+      ./family-location.nix
+      ./family-location-dashboard.nix
       ./school-diary.nix
       ./ai-vpn.nix
       ./byparr.nix
