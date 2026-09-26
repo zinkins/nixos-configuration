@@ -16,6 +16,9 @@ in
         handle_path /school-diary/* {
           reverse_proxy 127.0.0.1:8084
         }
+        handle_path /family-location/* {
+          reverse_proxy 127.0.0.1:8085
+        }
         handle {
           reverse_proxy 127.0.0.1:8082
         }
