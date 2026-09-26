@@ -15,6 +15,7 @@
       ./reverse-proxy.nix
       ./homepage.nix
       ./family-location.nix
+      ./family-location-dashboard.nix
       ./school-diary.nix
       ./ai-vpn.nix
       ./byparr.nix
@@ -98,12 +99,14 @@
   nixpkgs.config.allowUnfree = true;
 
   # List packages installed in system profile.
+  # You can use https://search.nixos.org/ to find more packages (and options).
   # environment.systemPackages = with pkgs; [
-  #   vim
+  #   vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
   #   wget
   # ];
 
-  # Some programs need SUID wrappers, and can be configured further.
+  # Some programs need SUID wrappers, can be configured further or are
+  # started in user sessions.
   # programs.mtr.enable = true;
   # programs.gnupg.agent = {
   #   enable = true;
@@ -132,12 +135,13 @@
   # Most users should NEVER change this value after the initial install, for any reason,
   # even if you've upgraded your system to a new NixOS release.
   #
-  # This value does NOT affect the Nixpkgs version or version of the system packages you can install.
-  # It DOES affect the default settings of various stateful services, like databases, etc. For
-  # example, if your system.stateVersion is 25.11, then the default PostgreSQL version is 17,
-  # but if your system.stateVersion is 26.05, then the default PostgreSQL version is 18.
+  # This value does NOT affect the Nixpkgs version your packages and OS are pulled from,
+  # so changing it will NOT upgrade your system - see https://nixos.org/manual/nixos/stable/#sec-upgrading for how
+  # to actually do that.
   #
-  # The current value is the release version of the first NixOS install on this machine.
+  # This value being lower than the current NixOS release does NOT mean your system is
+  # out of date, out of support, or vulnerable.
+  #
   # Do NOT change this value unless you have manually inspected all the changes it would make to your configuration,
   # and migrated your data accordingly.
   #
