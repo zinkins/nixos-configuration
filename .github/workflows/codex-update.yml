@@ -1,0 +1,70 @@
+name: Update Codex
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * *'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: codex-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout production configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Update only the Codex package source
+        id: update
+        run: |
+          jq -S '.nodes | del(."codex-nixpkgs")' flake.lock > "$RUNNER_TEMP/other-inputs.json"
+          nix flake update codex-nixpkgs
+          jq -S '.nodes | del(."codex-nixpkgs")' flake.lock | cmp "$RUNNER_TEMP/other-inputs.json" -
+          if ! git diff --quiet -- flake.lock; then
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      # GITHUB_TOKEN-created PRs do not trigger pull_request CI. Run the
+      # same validation here before publishing or updating the PR instead.
+      - name: Check flake
+        if: steps.update.outputs.changed == 'true'
+        run: nix flake check --show-trace
+
+      - name: Build NixOS system
+        if: steps.update.outputs.changed == 'true'
+        run: nix build .#nixosConfigurations.nixos.config.system.build.toplevel --no-link --print-build-logs
+
+      - name: Create or update the Codex PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          add-paths: flake.lock
+          branch: codex/update-codex
+          base: master
+          delete-branch: true
+          commit-message: 'chore(codex): update package source'
+          title: 'chore(codex): update package source'
+          body: |
+            Updates only the pinned Codex Nixpkgs input and its package dependencies.
+            The stable host Nixpkgs input is unchanged. Codex keeps its VPN wrapper.
+
+            Validation before this PR was created or updated: `nix flake check`
+            and a full NixOS system build. See the Update Codex workflow run.
+            Merge manually to deploy through the existing configuration sync timer.

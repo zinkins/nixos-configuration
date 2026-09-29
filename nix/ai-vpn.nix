@@ -1,6 +1,7 @@
-{ lib, pkgs, ... }:
+{ inputs, lib, pkgs, ... }:
 
 let
+  codex = inputs.codex-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.codex;
   namespaceName = "ai-vpn";
   hostInterface = "ai-vpn-host";
   namespaceInterface = "ai-vpn-ns";
@@ -31,7 +32,7 @@ let
 
     case "$target" in
       codex)
-        executable=${pkgs.codex}/bin/codex
+        executable=${codex}/bin/codex
         ;;
       claude)
         executable=${pkgs.claude-code}/bin/claude

@@ -45,6 +45,33 @@ The service state is stored under:
 
 Logs are kept in the systemd journal.
 
+## Codex package updates
+
+`.github/workflows/codex-update.yml` runs daily at 03:23 UTC and can also be
+started manually from the **Update Codex** workflow on `master`.
+It updates only the `codex-nixpkgs` input in `flake.lock`, checks the flake,
+and builds the complete NixOS system before creating or updating one PR on
+`codex/update-codex`. A failed check or build prevents publishing the update.
+The stable host `nixpkgs` input and the VPN wrapper are preserved.
+
+Updates follow Codex availability in `nixos-unstable`, so they can lag behind
+OpenAI releases. Input revisions can also update Codex dependencies without
+changing the Codex version. No PR is created when the lock file is unchanged.
+
+GitHub Actions must be allowed to create pull requests in repository
+**Settings > Actions > General > Workflow permissions**. No personal token
+is needed. PRs created with `GITHUB_TOKEN` do not trigger the usual
+`pull_request` workflow, so the updater runs the same flake check and full
+system build before creating or updating them. See the
+[create-pull-request documentation](https://github.com/peter-evans/create-pull-request#token).
+If branch protection requires the separate **Validate** check, close and reopen
+the generated PR to trigger it before merging.
+
+Review and merge the PR manually. The existing configuration sync timer then
+applies it within roughly 15 minutes; the workflow never merges or deploys.
+Already running Codex processes keep their current binary until restarted.
+To roll back, revert the update PR and merge that revert through the same path.
+
 ## First activation
 
 Because the updater itself is part of the NixOS configuration, install this revision once manually:

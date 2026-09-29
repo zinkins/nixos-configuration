@@ -54,6 +54,15 @@ claude
 
 `claude-cli` is also available as an alias for `claude`.
 
+## Codex updates
+
+Codex comes from the separately pinned `codex-nixpkgs` input (`nixos-unstable`),
+while the host and Claude Code continue to use the stable `nixpkgs` input.
+The VPN wrapper still starts the exact Nix-store binary selected by the lock file.
+
+The daily update workflow and deployment steps are documented in
+[`AUTO-UPDATE.md`](AUTO-UPDATE.md#codex-package-updates).
+
 ## Verify the route
 
 The helper prints the public IPv4 address seen through the isolated namespace:
