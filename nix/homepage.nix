@@ -44,15 +44,16 @@ let
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     IP = "${pkgs.iproute2}/bin/ip"
+    CURL = "${pkgs.curl}/bin/curl"
     ZPOOL = "${pkgs.zfs}/bin/zpool"
 
-    def run(command):
+    def run(command, timeout=3):
         try:
             return subprocess.check_output(
                 command,
                 text=True,
                 stderr=subprocess.DEVNULL,
-                timeout=3,
+                timeout=timeout,
             ).strip()
         except (subprocess.SubprocessError, OSError):
             return ""
@@ -67,9 +68,30 @@ let
             except (ValueError, IndexError):
                 pass
 
+        vpn_up = bool(os.path.exists("/sys/class/net/awg0") and vpn_ip)
+        internet_ok = False
+        if vpn_up:
+            # Binding curl to awg0's source address selects routing table 51820
+            # from nix/amnezia.nix, so this tests egress through the VPN rather
+            # than the host's normal default route.  The target is an IP literal
+            # to keep DNS availability out of the connectivity check.
+            http_code = run([
+                CURL,
+                "--interface", vpn_ip,
+                "--silent",
+                "--show-error",
+                "--output", "/dev/null",
+                "--write-out", "%{http_code}",
+                "--connect-timeout", "2",
+                "--max-time", "4",
+                "https://1.1.1.1/cdn-cgi/trace",
+            ], timeout=5)
+            internet_ok = bool(http_code and http_code[0] in ("2", "3"))
+
         return {
-            "vpn": "Подключен" if os.path.exists("/sys/class/net/awg0") and vpn_ip else "Отключен",
+            "vpn": "Подключен" if vpn_up else "Отключен",
             "vpnIp": vpn_ip or "—",
+            "vpnInternet": "Доступен" if internet_ok else "Нет доступа",
         }
 
     def zfs_status():
@@ -164,6 +186,13 @@ in
           };
         }
         {
+          "Хранилище" = {
+            style = "row";
+            columns = 1;
+            icon = "mdi-database";
+          };
+        }
+        {
           "Семья" = {
             style = "row";
             columns = 3;
@@ -193,7 +222,7 @@ in
           label = "Сервер";
           cpu = true;
           memory = true;
-          disk = [ "/" "/myraid1" ];
+          disk = [ "/" ];
           cputemp = true;
           uptime = true;
           network = true;
@@ -324,7 +353,6 @@ in
             AmneziaWG = {
               icon = "mdi-vpn";
               description = "VPN для домашних сервисов";
-              siteMonitor = "http://127.0.0.1:${toString statusPort}/status";
               widget = {
                 type = "customapi";
                 url = "http://127.0.0.1:${toString statusPort}/status";
@@ -335,9 +363,30 @@ in
                     label = "VPN";
                   }
                   {
-                    field = "vpnIp";
-                    label = "IP";
+                    field = "vpnInternet";
+                    label = "Интернет через VPN";
                   }
+                  {
+                    field = "vpnIp";
+                    label = "IP туннеля";
+                  }
+                ];
+              };
+            };
+          }
+        ];
+      }
+      {
+        "Хранилище" = [
+          {
+            "ZFS myraid1" = {
+              icon = "mdi-database";
+              description = "Хранилище фильмов и данных";
+              widget = {
+                type = "customapi";
+                url = "http://127.0.0.1:${toString statusPort}/status";
+                refreshInterval = 10000;
+                mappings = [
                   {
                     field = "zfs";
                     label = "ZFS";
