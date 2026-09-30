@@ -3,7 +3,17 @@
 let
   familyLocationPort = 8085;
   python = pkgs.python3.withPackages (ps: with ps; [ websockets ]);
-  familyLocationApp = ./family-location.py;
+
+  # Keep the application as a normal Python source file so Nix indentation
+  # rules cannot alter it. Compile it during the build so syntax errors are
+  # caught by CI/nixos-rebuild build instead of during systemd activation.
+  familyLocationApp = pkgs.runCommand "family-location.py" { } ''
+    ${python}/bin/python - <<'PY'
+    source = open("${./family-location.py}", encoding="utf-8").read()
+    compile(source, "family-location.py", "exec")
+    PY
+    cp ${./family-location.py} "$out"
+  '';
 in
 {
   users.groups.family-location = { };
