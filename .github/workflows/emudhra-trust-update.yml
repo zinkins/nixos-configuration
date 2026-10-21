@@ -1,0 +1,59 @@
+name: One-off eMudhra Nixpkgs trust-store update
+
+on:
+  push:
+    branches:
+      - security/emudhra-ca-2026
+
+permissions:
+  contents: write
+
+concurrency:
+  group: emudhra-nixpkgs-one-off
+  cancel-in-progress: false
+
+jobs:
+  update-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout update branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Update only pinned stable nixpkgs
+        run: |
+          set -euo pipefail
+          jq -S '.nodes | del(.nixpkgs)' flake.lock > "$RUNNER_TEMP/other-inputs.json"
+          nix flake update nixpkgs
+          jq -S '.nodes | del(.nixpkgs)' flake.lock | cmp "$RUNNER_TEMP/other-inputs.json" -
+          git diff --check
+          git diff -- flake.lock
+
+      - name: Check flake
+        run: nix flake check --show-trace
+
+      - name: Build complete NixOS system
+        run: nix build .#nixosConfigurations.nixos.config.system.build.toplevel --no-link --print-build-logs
+
+      - name: Commit verified lock-file update
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- flake.lock; then
+            echo "stable nixpkgs already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add flake.lock
+          git commit -m "chore(security): update nixpkgs for eMudhra CA trust fixes"
+          git push origin HEAD:security/emudhra-ca-2026
