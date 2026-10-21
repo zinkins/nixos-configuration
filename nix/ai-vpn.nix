@@ -36,6 +36,9 @@ let
         ;;
       claude)
         executable=${pkgs.claude-code}/bin/claude
+        # Use only the patched system trust store. Claude's native binary
+        # otherwise combines it with its older bundled Mozilla roots.
+        export CLAUDE_CODE_CERT_STORE=system
         ;;
       check)
         executable=${pkgs.curl}/bin/curl
