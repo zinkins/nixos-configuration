@@ -1,0 +1,81 @@
+name: Byparr Firefox NSS distrust smoke test
+
+on:
+  pull_request:
+    paths:
+      - nix/byparr.nix
+      - nix/byparr-firefox-utils.py
+      - nix/certs/emsign-ecc-root-ca-g3.pem
+      - .github/workflows/byparr-nss-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Create Firefox NSS explicit-distrust template
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libnss3-tools
+          sudo install -d -m 755 /tmp/byparr-nss-template
+
+          expected=86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b
+          actual="$(openssl x509 -in nix/certs/emsign-ecc-root-ca-g3.pem -outform DER | sha256sum | cut -d' ' -f1)"
+          test "$actual" = "$expected"
+          certutil -N -d sql:/tmp/byparr-nss-template --empty-password
+          certutil -A -d sql:/tmp/byparr-nss-template -n "emSign ECC Root CA - G3" -t "p,p,p" -i nix/certs/emsign-ecc-root-ca-g3.pem
+          certutil -L -d sql:/tmp/byparr-nss-template
+          sudo chmod -R a+rX /tmp/byparr-nss-template
+
+      - name: Run isolated upstream Byparr 3.0.4 with hardened profiles
+        run: |
+          set -euo pipefail
+          docker run --pull=always --detach --name byparr-nss-ci \
+            --network host --shm-size=512m \
+            --security-opt=no-new-privileges \
+            -e HOST=127.0.0.1 -e PORT=18191 -e PROXY_SERVER= \
+            -v "/tmp/byparr-nss-template:/etc/byparr-nss-profile:ro" \
+            -v "$PWD/nix/byparr-firefox-utils.py:/app/src/utils.py:ro" \
+            ghcr.io/thephaseless/byparr:3.0.4
+          for _ in $(seq 1 50); do
+            if curl -fsS --max-time 2 http://127.0.0.1:18191/openapi.json > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs byparr-nss-ci
+          exit 1
+
+      - name: Assert rejection inside the real Firefox engine
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --max-time 120 \
+            -H 'Content-Type: application/json' \
+            -d '{"cmd":"request.get","url":"https://example.com/","maxTimeout":90000}' \
+            http://127.0.0.1:18191/v1 > /tmp/control.json
+          jq -e '.status == "ok" and .solution.status == 200' /tmp/control.json
+
+          for host in dv-g3b-emudhra.we-have-a-problem.com dv-g3b-aaa-emudhra.we-have-a-problem.com; do
+            echo "Verifying that Firefox rejects $host"
+            curl --silent --show-error --max-time 90 \
+              -H 'Content-Type: application/json' \
+              -d "{\"cmd\":\"request.get\",\"url\":\"https://$host/\",\"maxTimeout\":60000}" \
+              http://127.0.0.1:18191/v1 > /tmp/rejected.json
+            # HTTP 502 from Byparr is expected on a Firefox TLS failure.
+            jq -e '.detail | test("SEC_ERROR_|MOZILLA_PKIX_ERROR_|SSL_ERROR_")' /tmp/rejected.json
+          done
+
+      - name: Logs on failure
+        if: failure()
+        run: docker logs --tail=150 byparr-nss-ci || true
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f byparr-nss-ci || true
