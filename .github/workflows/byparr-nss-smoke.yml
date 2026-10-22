@@ -24,7 +24,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq libnss3-tools
-          sudo install -d -m 755 /tmp/byparr-nss-template
+          mkdir -p /tmp/byparr-nss-template
 
           expected=86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b
           actual="$(openssl x509 -in nix/certs/emsign-ecc-root-ca-g3.pem -outform DER | sha256sum | cut -d' ' -f1)"
