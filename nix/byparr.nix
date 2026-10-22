@@ -15,10 +15,7 @@ let
       exit 1
     }
     certutil -N -d "sql:$out" --empty-password
-    certutil -A -d "sql:$out" \\
-      -n "emSign ECC Root CA - G3" \\
-      -t "p,p,p" \\
-      -i ${./certs/emsign-ecc-root-ca-g3.pem}
+    certutil -A -d "sql:$out" -n "emSign ECC Root CA - G3" -t "p,p,p" -i ${./certs/emsign-ecc-root-ca-g3.pem}
     certutil -L -d "sql:$out" | grep -F "emSign ECC Root CA - G3"
     certutil -L -d "sql:$out" | grep -F "p,p,p"
   '';
