@@ -257,31 +257,35 @@ INDEX_HTML = r'''<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Геолокация</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <!-- MapLibre replaces Leaflet; raster tiles remain OpenStreetMap, no map API key. -->
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.10.0/dist/maplibre-gl.css">
   <style>
     html, body, #map { height: 100%; margin: 0; }
     body { background: #07101d; color: #fff; font-family: system-ui, sans-serif; }
-    #status { position: absolute; z-index: 1000; top: 8px; left: 8px; right: 8px; display: flex; gap: 6px; flex-wrap: wrap; pointer-events: none; }
+    #status { position: absolute; z-index: 10; top: 8px; left: 8px; right: 56px; display: flex; gap: 6px; flex-wrap: wrap; pointer-events: none; }
     .pill { padding: 5px 8px; border-radius: 999px; background: rgba(2,6,23,.88); border: 1px solid rgba(148,163,184,.45); font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
     .ok { border-color: rgba(52,211,153,.65); }
     .warn { border-color: rgba(251,191,36,.7); }
     .bad { border-color: rgba(248,113,113,.7); }
+    .person-pin { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+    .person-label {
+      background: rgba(2,6,23,.92); border: 1px solid rgba(148,163,184,.6);
+      color: #fff; padding: 5px 7px; border-radius: 6px; font: 12px system-ui, sans-serif;
+      white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.35);
+    }
+    .person-dot { width: 12px; height: 12px; border-radius: 50%; background: #34d399; border: 2px solid #fff; box-shadow: 0 1px 6px #000b; }
+    .maplibregl-ctrl-attrib { font-size: 11px !important; }
   </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="status"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://unpkg.com/maplibre-gl@6.10.0/dist/maplibre-gl.js"></script>
 <script>
 (function () {
-  var map = L.map("map", { zoomControl: true }).setView([55.0084, 82.9357], 11);
-  var markers = [];
   var statusEl = document.getElementById("status");
-
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "© OpenStreetMap"
-  }).addTo(map);
+  var markers = new Map();
+  var fitted = false;
 
   function pill(text, cls) {
     var el = document.createElement("span");
@@ -289,6 +293,32 @@ INDEX_HTML = r'''<!doctype html>
     el.textContent = text;
     return el;
   }
+
+  // WebGL is required by MapLibre. Fail visibly instead of leaving a blank map.
+  if (!window.maplibregl || !maplibregl.supported()) {
+    statusEl.appendChild(pill("Карта недоступна: требуется MapLibre и WebGL", "bad"));
+    return;
+  }
+
+  var map = new maplibregl.Map({
+    container: "map",
+    center: [82.9357, 55.0084],
+    zoom: 11,
+    maxZoom: 19,
+    style: {
+      version: 8,
+      sources: {
+        osm: {
+          type: "raster",
+          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          attribution: "© OpenStreetMap contributors"
+        }
+      },
+      layers: [{ id: "osm-tiles", type: "raster", source: "osm" }]
+    }
+  });
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
   function ageText(ms) {
     if (!ms) return "нет данных";
@@ -308,27 +338,63 @@ INDEX_HTML = r'''<!doctype html>
       return;
     }
     statusEl.appendChild(pill(data.connected ? "2ГИС: подключен" : "2ГИС: переподключение", data.connected ? "ok" : "warn"));
-    if (!data.selfSeen) statusEl.appendChild(pill("Своя позиция пока не пришла из 2ГИС", "warn"));
+    if (!data.selfSeen) statusEl.appendChild(pill("Своя позиция не опознана автоматически", "warn"));
     if (data.missing && data.missing.length) statusEl.appendChild(pill("Нет данных: " + data.missing.join(", "), "warn"));
+  }
+
+  function createMarker() {
+    var element = document.createElement("div");
+    element.className = "person-pin";
+    var label = document.createElement("div");
+    label.className = "person-label";
+    var dot = document.createElement("div");
+    dot.className = "person-dot";
+    element.appendChild(label);
+    element.appendChild(dot);
+    return { marker: new maplibregl.Marker({ element: element, anchor: "bottom" }).addTo(map), label: label };
   }
 
   function render(data) {
     renderStatus(data);
-    markers.forEach(function (marker) { map.removeLayer(marker); });
-    markers = [];
-
+    var visible = new Set();
     var points = [];
     (data.people || []).forEach(function (person) {
-      if (person.lat == null || person.lon == null) return;
-      var text = person.name + " · " + ageText(person.lastSeen);
-      if (person.battery != null) text += " · батарея " + person.battery + "%";
-      var marker = L.marker([person.lat, person.lon]).addTo(map).bindTooltip(text, { permanent: true, direction: "top" });
-      markers.push(marker);
-      points.push([person.lat, person.lon]);
+      var lat = Number(person.lat);
+      var lon = Number(person.lon);
+      if (person.lat == null || person.lon == null || !Number.isFinite(lat) || !Number.isFinite(lon) ||
+          lat < -85 || lat > 85 || lon < -180 || lon > 180) return;
+
+      var id = String(person.id || person.name);
+      visible.add(id);
+      var item = markers.get(id);
+      if (!item) {
+        item = createMarker();
+        markers.set(id, item);
+      }
+      item.marker.setLngLat([lon, lat]);
+      var label = person.name + " · " + ageText(person.lastSeen);
+      if (person.battery != null) label += " · батарея " + person.battery + "%";
+      item.label.textContent = label;  // Avoid injecting untrusted profile names as HTML.
+      points.push([lon, lat]);         // MapLibre uses [longitude, latitude].
     });
 
-    if (points.length === 1) map.setView(points[0], 15);
-    else if (points.length > 1) map.fitBounds(points, { padding: [40, 40], maxZoom: 15 });
+    markers.forEach(function (item, id) {
+      if (!visible.has(id)) {
+        item.marker.remove();
+        markers.delete(id);
+      }
+    });
+
+    // Fit only once: subsequent 10-second updates must not undo the user's pan/zoom.
+    if (!fitted && points.length > 0) {
+      fitted = true;
+      if (points.length === 1) map.jumpTo({ center: points[0], zoom: 15 });
+      else {
+        var bounds = new maplibregl.LngLatBounds();
+        points.forEach(function (point) { bounds.extend(point); });
+        map.fitBounds(bounds, { padding: { top: 75, right: 35, bottom: 35, left: 35 }, maxZoom: 15, duration: 0 });
+      }
+    }
   }
 
   async function refresh() {
