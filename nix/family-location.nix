@@ -12,6 +12,9 @@ let
     source = open("${./family-location.py}", encoding="utf-8").read()
     compile(source, "family-location.py", "exec")
     PY
+    # Offline tests: validate aggregate diagnostics and ensure no raw location
+    # data, names, identifiers, or tokens can escape into journal logs.
+    ${python}/bin/python ${./family-location-diagnostics-test.py} ${./family-location.py}
     cp ${./family-location.py} "$out"
   '';
 in

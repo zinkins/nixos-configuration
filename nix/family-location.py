@@ -112,6 +112,58 @@ def handle_initial_state(payload):
         apply_state(item)
 
 
+
+def initial_state_diagnostics(payload):
+    """Return only schema flags and counts, never tokens, IDs, names or coordinates."""
+    raw_profiles = payload.get("profiles")
+    raw_states = payload.get("states")
+    source_profiles = raw_profiles if isinstance(raw_profiles, list) else []
+    source_states = raw_states if isinstance(raw_states, list) else []
+    source_profiles = [p for p in source_profiles if isinstance(p, dict)]
+    source_states = [p for p in source_states if isinstance(p, dict)]
+
+    profile_by_id = {
+        str(p["id"]): p for p in source_profiles if p.get("id") is not None
+    }
+    state_by_id = {
+        str(state["id"]): state
+        for state in source_states if state.get("id") is not None
+    }
+    with_geo = {
+        uid for uid, state in state_by_id.items()
+        if isinstance(state.get("location"), dict)
+        and state["location"].get("lat") is not None
+        and state["location"].get("lon") is not None
+    }
+    allowed_names = wanted_friend_names()
+    self_like_keys = (
+        "self", "me", "owner", "account", "user", "myState",
+        "selfState", "userState", "currentUser", "currentUserState",
+        "myProfile", "userProfile", "currentProfile",
+    )
+    with lock:
+        identity = account_uid
+
+    token = access_token()
+    return {
+        "tokenFormat": "jwt-like" if len(token.split(".")) == 3 else "opaque",
+        "identityClaimDecoded": bool(identity),
+        "identityMatchesProfile": bool(identity and identity in profile_by_id),
+        "identityMatchesState": bool(identity and identity in state_by_id),
+        "profiles": len(profile_by_id),
+        "states": len(state_by_id),
+        "statesWithCoordinates": len(with_geo),
+        "statesWithoutProfile": sum(uid not in profile_by_id for uid in state_by_id),
+        "statesWithoutProfileCoordinates": len(with_geo - profile_by_id.keys()),
+        "namedProfilesOutsideAllowlistWithCoordinates": sum(
+            uid in with_geo and bool(p.get("name"))
+            and str(p["name"]) not in allowed_names
+            for uid, p in profile_by_id.items()
+        ),
+        "selfLikePayloadFields": [key for key in self_like_keys if key in payload],
+    }
+
+
 def handle_message(raw):
     try:
         message = json.loads(raw)
@@ -122,6 +174,12 @@ def handle_message(raw):
     payload = message.get("payload", {})
 
     if message_type == "initialState" and isinstance(payload, dict):
+        if os.environ.get("FAMILY_LOCATION_DIAGNOSTICS", "") == "1":
+            # Log only aggregate counts / known field names; do not log feed payload.
+            log.info(
+                "2GIS initialState diagnostics: %s",
+                json.dumps(initial_state_diagnostics(payload), sort_keys=True),
+            )
         handle_initial_state(payload)
         return
 
@@ -381,5 +439,6 @@ async def websocket_loop():
         delay = min(delay * 2, 60)
 
 
-threading.Thread(target=start_http, name="family-location-http", daemon=True).start()
-asyncio.run(websocket_loop())
+if __name__ == "__main__":
+    threading.Thread(target=start_http, name="family-location-http", daemon=True).start()
+    asyncio.run(websocket_loop())
