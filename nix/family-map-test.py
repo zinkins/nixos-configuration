@@ -29,7 +29,7 @@ assert "map.fitBounds" in html
 assert "new maplibregl.NavigationControl" in html
 assert "item.label.textContent = label" in html, "Untrusted display names must not become HTML"
 
-inline_scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", html, flags=re.DOTALL)
+inline_scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, flags=re.DOTALL)
 inline_scripts = [code for code in inline_scripts if code.strip()]
 assert len(inline_scripts) == 1, "Expected one inline JavaScript block"
 pathlib.Path(sys.argv[2]).write_text(inline_scripts[0], encoding="utf-8")
