@@ -15,6 +15,10 @@ let
     # Offline tests: validate aggregate diagnostics and ensure no raw location
     # data, names, identifiers, or tokens can escape into journal logs.
     ${python}/bin/python ${./family-location-diagnostics-test.py} ${./family-location.py}
+    # Validate the embedded HTML and check JavaScript syntax at build time.
+    # Node is a build-only tool, not a new runtime dependency for the service.
+    ${python}/bin/python ${./family-map-test.py} ${./family-location.py} family-map.js
+    ${pkgs.nodejs}/bin/node --check family-map.js
     cp ${./family-location.py} "$out"
   '';
 in
