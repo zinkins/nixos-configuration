@@ -23,7 +23,7 @@ The 2GIS protocol handling is based on the behavior documented by the MIT-licens
 
 ## One-time local secret configuration
 
-Sign in to 2GIS normally (for example through Sber ID) and obtain the value of the `id_access_token` cookie from the authenticated 2GIS session. Do not commit or paste that token into chats or issue trackers.
+Sign in to 2GIS normally (for example through Sber ID) and obtain an access token from an authenticated session. The browser may expose the cookie `dg5_auth_access_token` rather than the older `id_access_token`; the former has been confirmed to authenticate the existing WebSocket feed on this installation. Do not commit or paste either token into chats or issue trackers.
 
 Create `/var/lib/family-location/credentials.env` on the NixOS host:
 
@@ -49,9 +49,59 @@ After changing the token or allow-list, restart the service:
 sudo systemctl restart family-location.service
 ```
 
-If the access token expires, obtain a fresh `id_access_token` from a newly authenticated 2GIS session and replace `DGIS_ACCESS_TOKEN`.
+If the access token expires, obtain a fresh working access-token cookie from a newly authenticated 2GIS session and replace `DGIS_ACCESS_TOKEN`.
 
 The owner does not need to be included in `FAMILY_LOCATION_NAMES` when the access token is a JWT whose subject matches a state from the feed. If 2GIS uses an opaque token or does not send the owner's state, friends can still work normally while the own-position marker remains unavailable.
+
+
+## Verify whether the WebSocket sends the account owner's position
+
+The current browser cookie `dg5_auth_access_token` works for friend locations,
+but `selfSeen: false` can mean **either** that the token cannot identify its
+owner **or** that the WebSocket never supplies a state for the account owner.
+Do not assume an extra state belongs to the owner.
+
+To inspect the next `initialState` without leaking private location data,
+edit the existing secret file on the **server**, adding just:
+
+```ini
+FAMILY_LOCATION_DIAGNOSTICS="1"
+```
+
+Then restart and read the one-line summary from the local systemd journal:
+
+```bash
+sudo systemctl restart family-location.service
+sudo journalctl -u family-location.service -n 80 --no-pager | grep '2GIS initialState diagnostics'
+```
+
+The log includes **only** these fields: `tokenFormat` (opaque vs JWT-like),
+`identityClaimDecoded`, `identityMatchesProfile`, `identityMatchesState`,
+`profiles`, `states`, `statesWithCoordinates`, `statesWithoutProfile`,
+`statesWithoutProfileCoordinates`, `namedProfilesOutsideAllowlistWithCoordinates`,
+and `selfLikePayloadFields` (a fixed allowlist of protocol field **names**).
+
+There are **no** location coordinates, names, profile IDs, or token values in
+this diagnostic summary. This information stays in the server journal and is
+not exposed by a public API endpoint.
+
+Interpretation:
+
+- `statesWithoutProfileCoordinates > 0` means the server supplied at least
+  one geolocated state without a matching profile. It may be an owner state,
+  but is **not evidence** that it belongs to the owner.
+- `namedProfilesOutsideAllowlistWithCoordinates > 0` means some additional
+  named profiles have locations in the feed. Again, these are not necessarily
+  the account owner.
+- `identityMatchesState: true` means the decoded token subject matched a
+  feed state. A different token format or type of identifier may still prevent
+  correct recognition.
+- All extra-state counts at zero suggests the feed contains only the selected
+  friends, but does not prove the server lacks a separate owner endpoint.
+
+After collecting the summary, remove `FAMILY_LOCATION_DIAGNOSTICS` from the
+secret file and restart the service to stop diagnostic logging. Never paste
+the raw token or full WebSocket frames into a bug report.
 
 ## Diagnostics
 
