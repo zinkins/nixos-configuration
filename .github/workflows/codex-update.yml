@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  statuses: write
 
 concurrency:
   group: codex-update
@@ -53,6 +54,7 @@ jobs:
         run: nix build .#nixosConfigurations.nixos.config.system.build.toplevel --no-link --print-build-logs
 
       - name: Create or update the Codex PR
+        id: cpr
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           add-paths: flake.lock
@@ -68,3 +70,17 @@ jobs:
             Validation before this PR was created or updated: `nix flake check`
             and a full NixOS system build. See the Update Codex workflow run.
             Merge manually to deploy through the existing configuration sync timer.
+
+      # PRs created with GITHUB_TOKEN cannot trigger pull_request checks.
+      # Publish the successful pre-PR validation on the generated commit.
+      - name: Publish Codex PR validation status
+        if: steps.update.outputs.changed == 'true' && steps.cpr.outputs.pull-request-head-sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ steps.cpr.outputs.pull-request-head-sha }}
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${PR_HEAD_SHA}" \
+            -f state=success \
+            -f context='codex-update / NixOS validated' \
+            -f description='nix flake check and full NixOS build passed' \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
