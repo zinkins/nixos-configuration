@@ -62,9 +62,13 @@ GitHub Actions must be allowed to create pull requests in repository
 **Settings > Actions > General > Workflow permissions**. No personal token
 is needed. PRs created with `GITHUB_TOKEN` do not trigger the usual
 `pull_request` workflow, so the updater runs the same flake check and full
-system build before creating or updating them. See the
+system build before creating or updating them. After successful validation,
+it also posts a **codex-update / NixOS validated** commit status on the PR head,
+linking to the successful **Update Codex** run. This avoids a second NixOS
+build. See the
 [create-pull-request documentation](https://github.com/peter-evans/create-pull-request#token).
-If branch protection requires the separate **Validate** check, close and reopen
+This status does not run or replace the separate **Validate** GitHub Actions
+workflow. If branch protection requires that specific check, close and reopen
 the generated PR to trigger it before merging.
 
 Review and merge the PR manually. The existing configuration sync timer then
