@@ -11,14 +11,14 @@ app = runpy.run_path(sys.argv[1], run_name="family_location_test")
 diagnose = app["initial_state_diagnostics"]
 globals_ = diagnose.__globals__
 os.environ["DGIS_ACCESS_TOKEN"] = "opaque_test_access_secret"
-os.environ["FAMILY_LOCATION_NAMES"] = "Марина|Ульяна"
+os.environ["FAMILY_LOCATION_NAMES"] = "Friend A|Friend B"
 globals_["account_uid"] = ""
 
 payload = {
     "serverTime": 1790000000000,
     "profiles": [
-        {"id": "friend1", "name": "Марина", "logo": "PRIVATE"},
-        {"id": "friend2", "name": "Ульяна", "logo": "PRIVATE"},
+        {"id": "friend1", "name": "Friend A", "logo": "PRIVATE"},
+        {"id": "friend2", "name": "Friend B", "logo": "PRIVATE"},
     ],
     "states": [
         {"id": "friend1", "location": {"lat": 55.111111, "lon": 82.222222}},
@@ -57,7 +57,7 @@ assert result["identityClaimDecoded"] is True, result
 # malformed input containing other nested structures.
 serialized = json.dumps(result, ensure_ascii=False)
 for forbidden in (
-    "Марина", "Ульяна", "friend1", "unprofiled_private_id",
+    "Friend A", "Friend B", "friend1", "unprofiled_private_id",
     "private_account_id", "55.111111", "83.666666", "access_secret",
 ):
     assert forbidden not in serialized, forbidden
