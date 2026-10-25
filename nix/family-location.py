@@ -257,7 +257,7 @@ INDEX_HTML = r'''<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Геолокация</title>
-  <!-- MapLibre replaces Leaflet; raster tiles remain OpenStreetMap, no map API key. -->
+  <!-- Raster OpenStreetMap tiles, rendered without a map API key. -->
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.10.0/dist/maplibre-gl.css">
   <style>
     html, body, #map { height: 100%; margin: 0; }
