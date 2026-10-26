@@ -9,7 +9,7 @@ The implementation is intentionally split into four pieces:
 - `nix/family-location-dashboard.nix` — Homepage iframe group.
 - `nix/reverse-proxy.nix` — same-origin Caddy route at `/family-location/`.
 
-Keeping Python in a normal source file is intentional: embedded HTML contains its own indentation and must not affect Nix indented-string processing. Nix compiles the Python source during the system build so syntax errors fail CI/`nixos-rebuild build` before activation.
+Keeping Python in a normal source file is intentional: embedded HTML contains its own indentation and must not affect Nix indented-string processing. Nix compiles the Python source during the system build and checks the embedded MapLibre JavaScript syntax with Node, so syntax errors fail CI/`nixos-rebuild build` before activation.
 
 The 2GIS protocol handling is based on the behavior documented by the MIT-licensed `Marker284/zond2gis` project. It uses an unofficial, undocumented 2GIS API and may require maintenance if 2GIS changes that API.
 
@@ -18,7 +18,7 @@ The 2GIS protocol handling is based on the behavior documented by the MIT-licens
 - The 2GIS access token and selected display names are **not** stored in Git.
 - The service receives the account's 2GIS location feed internally, but `/api/locations` emits only the authenticated account owner (when the token/feed lets it identify that state) and names explicitly listed in `FAMILY_LOCATION_NAMES`.
 - The HTTP service listens only on `127.0.0.1:8085`; browser access goes through `family.home` and Caddy.
-- The map uses OpenStreetMap raster tiles and loads Leaflet assets from `unpkg.com`. Those requests reveal the viewed map area / client IP to the respective public services.
+- The map uses OpenStreetMap raster tiles and a pinned MapLibre GL JS 6.10.0 renderer loaded from `unpkg.com` (no Leaflet and no API key). The map requires WebGL in the browser. Tile and CDN requests reveal the client IP and viewed map area to the respective public services; no 2GIS access token is sent to either.
 - `family.home` itself is LAN-facing and has no additional authentication layer, so anyone who can open the dashboard can see the selected locations.
 
 ## One-time local secret configuration
@@ -125,3 +125,20 @@ http://family.home/family-location/
 ```
 
 If the map says that the own position has not arrived, 2GIS is not sending an identifiable owner state. Friends can still work normally; do not synthesize or guess the owner's coordinates.
+
+
+## Map renderer
+
+The family map uses MapLibre GL JS 6.10.0 for pan/zoom, DOM markers, and
+initial fit-to-bounds. No Leaflet assets or code are loaded.
+
+- Existing source: 2GIS WebSocket -> filtered local `/api/locations` endpoint.
+- Basemap: OpenStreetMap raster tiles (subject to the OSM tile usage policy).
+- Browser assets: pinned MapLibre JavaScript and CSS from `unpkg.com`.
+- New points are plotted at `[longitude, latitude]`; markers update every
+  10 seconds without resetting the user's manual pan or zoom.
+- The map requires browser WebGL. If disabled, the page displays a warning.
+
+The map still has an external CDN dependency. For fully offline maps or
+avoiding third-party requests, additional self-hosted tiles/assets would be
+needed and are outside this renderer change.
