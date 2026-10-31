@@ -32,6 +32,15 @@ assert "10000" in html
 assert "markerLayer.appendChild(el)" in html
 assert "redraw();" in html
 assert "item.label.textContent = label" in html, "Untrusted display names must not become HTML"
+assert "function layoutLabels()" in html
+assert "intersectionArea(rect, other, 5)" in html, "Nearby labels must not overlap"
+assert "labelLayer.appendChild(label)" in html, "Labels must move independently from the location dot"
+assert "leaderLayer.appendChild(leader)" in html
+assert 'center = [target.lon, target.lat]' in html, "Person button must center its location"
+assert 'syncPersonButtons(data.people || [])' in html
+assert 'var personButtons = new Map()' in html
+assert 'zoom = 15;' in html, "Keep initial fit behavior"
+assert "aria-pressed" in html
 
 inline_scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, flags=re.DOTALL)
 inline_scripts = [code for code in inline_scripts if code.strip()]

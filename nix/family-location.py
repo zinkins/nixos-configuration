@@ -264,7 +264,12 @@ INDEX_HTML = r'''<!doctype html>
     #map.dragging { cursor: grabbing; }
     .tile-layer, .marker-layer { position: absolute; inset: 0; }
     .tile-layer img { position: absolute; width: 256px; height: 256px; pointer-events: none; user-select: none; }
-    .marker-layer { pointer-events: none; }
+    .marker-layer, .leader-layer, .label-layer { pointer-events: none; }
+    .person-leader { position: absolute; width: 1px; background: rgba(255,255,255,.8); box-shadow: 0 0 2px #020617; }
+    #people-controls { position: absolute; z-index: 20; bottom: 20px; left: 8px; right: 55px; display: flex; flex-wrap: wrap; gap: 5px; pointer-events: none; }
+    #people-controls button { pointer-events: auto; background: rgba(2,6,23,.92); color: #fff; border: 1px solid #64748b; border-radius: 999px; padding: 5px 10px; font: 12px system-ui, sans-serif; cursor: pointer; }
+    #people-controls button[aria-pressed="true"] { border-color: #34d399; background: #064e3b; }
+    #people-controls button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
     .map-controls { position: absolute; z-index: 15; top: 8px; right: 8px; display: flex; flex-direction: column; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 8px #0008; }
     .map-controls button { border: 0; border-bottom: 1px solid #aaa; padding: 5px 11px; min-width: 34px; background: #fff; color: #111; font: bold 20px system-ui, sans-serif; cursor: pointer; }
     .map-controls button:last-child { border-bottom: 0; }
@@ -276,34 +281,46 @@ INDEX_HTML = r'''<!doctype html>
     .ok { border-color: rgba(52,211,153,.65); }
     .warn { border-color: rgba(251,191,36,.7); }
     .bad { border-color: rgba(248,113,113,.7); }
-    .person-pin { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 4px; transform: translate(-50%, -100%); pointer-events: none; }
+    .person-pin { position: absolute; width: 16px; height: 16px; transform: translate(-50%, -50%); pointer-events: none; }
     .person-label {
       background: rgba(2,6,23,.92); border: 1px solid rgba(148,163,184,.6);
       color: #fff; padding: 5px 7px; border-radius: 6px; font: 12px system-ui, sans-serif;
-      white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.35);
+      position: absolute; transform: translateX(-50%); white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0,0,0,.35); max-width: calc(100% - 16px);
+      overflow: hidden; text-overflow: ellipsis; box-sizing: border-box;
     }
-    .person-dot { width: 12px; height: 12px; border-radius: 50%; background: #34d399; border: 2px solid #fff; box-shadow: 0 1px 6px #000b; }
+    .person-dot { box-sizing: border-box; width: 16px; height: 16px; border-radius: 50%; background: #34d399; border: 2px solid #fff; box-shadow: 0 1px 6px #000b; }
   </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="status"></div>
+<div id="people-controls" aria-label="Показать местоположение человека"></div>
 <script>
 (function () {
   "use strict";
   var mapEl = document.getElementById("map");
   var statusEl = document.getElementById("status");
+  var peopleControlsEl = document.getElementById("people-controls");
   var tileLayer = document.createElement("div");
+  var leaderLayer = document.createElement("div");
   var markerLayer = document.createElement("div");
+  var labelLayer = document.createElement("div");
   tileLayer.className = "tile-layer";
+  leaderLayer.className = "leader-layer";
   markerLayer.className = "marker-layer";
+  labelLayer.className = "label-layer";
   mapEl.appendChild(tileLayer);
+  mapEl.appendChild(leaderLayer);
   mapEl.appendChild(markerLayer);
+  mapEl.appendChild(labelLayer);
 
   var zoom = 11;
   var center = [82.9357, 55.0084];
   var tiles = new Map();
   var markers = new Map();
+  var personButtons = new Map();
+  var selectedId = null;
   var fitted = false;
   var tileError = false;
   var dragging = null;
@@ -383,9 +400,93 @@ INDEX_HTML = r'''<!doctype html>
       if (dx < -n * tileSize / 2) dx += n * tileSize;
       var x = width / 2 + dx;
       var y = height / 2 + p[1] - cp[1];
+      item.x = x;
+      item.y = y;
+      item.visible = (x >= -120 && x <= width + 120 && y >= -80 && y <= height + 80);
       item.el.style.left = x + "px";
       item.el.style.top = y + "px";
-      item.el.style.display = (x < -120 || x > width + 120 || y < -80 || y > height + 80) ? "none" : "flex";
+      item.el.style.display = item.visible ? "block" : "none";
+      item.label.style.display = item.visible ? "block" : "none";
+      item.leader.style.display = "none";
+    });
+    layoutLabels();
+  }
+  // Markers remain at their exact coordinates. Only labels may move vertically.
+  function intersectionArea(a, b, padding) {
+    var overlapX = Math.min(a.right, b.right + padding) - Math.max(a.left, b.left - padding);
+    var overlapY = Math.min(a.bottom, b.bottom + padding) - Math.max(a.top, b.top - padding);
+    return Math.max(0, overlapX) * Math.max(0, overlapY);
+  }
+  function overlayRectangle(element) {
+    var bounds = element.getBoundingClientRect();
+    var origin = mapEl.getBoundingClientRect();
+    return {
+      left: bounds.left - origin.left,
+      right: bounds.right - origin.left,
+      top: bounds.top - origin.top,
+      bottom: bounds.bottom - origin.top
+    };
+  }
+  function layoutLabels() {
+    var width = mapEl.clientWidth;
+    var height = mapEl.clientHeight;
+    if (!width || !height) return;
+    var obstacles = [];
+    if (statusEl.children.length) obstacles.push(overlayRectangle(statusEl));
+    if (peopleControlsEl.children.length) obstacles.push(overlayRectangle(peopleControlsEl));
+    obstacles.push(overlayRectangle(controls));
+    var occupied = [];
+    var visible = Array.from(markers.values()).filter(function (item) { return item.visible; });
+    visible.sort(function (a, b) { return a.name.localeCompare(b.name, "ru"); });
+
+    visible.forEach(function (item) {
+      var w = item.label.offsetWidth;
+      var h = item.label.offsetHeight;
+      var x = Math.max(4 + w / 2, Math.min(width - 4 - w / 2, item.x));
+      var step = h + 7;
+      var best = null;
+      for (var rank = 0; rank < 24; rank++) {
+        var tier = Math.floor(rank / 2);
+        var top = (rank % 2 === 0)
+          ? item.y - 20 - h - tier * step
+          : item.y + 20 + tier * step;
+        var rect = { left: x - w / 2, right: x + w / 2, top: top, bottom: top + h };
+        var penalty = rank * 2;
+        penalty += Math.max(0, 4 - rect.left) * 1000;
+        penalty += Math.max(0, rect.right - width + 4) * 1000;
+        penalty += Math.max(0, 4 - rect.top) * 1000;
+        penalty += Math.max(0, rect.bottom - height + 4) * 1000;
+        occupied.forEach(function (other) { penalty += intersectionArea(rect, other, 5) * 100; });
+        obstacles.forEach(function (obstacle) { penalty += intersectionArea(rect, obstacle, 4) * 20; });
+        // Prefer the nearest clear position while avoiding other location dots.
+        visible.forEach(function (other) {
+          if (intersectionArea(rect, {
+            left: other.x - 10, right: other.x + 10,
+            top: other.y - 10, bottom: other.y + 10
+          }, 2)) penalty += 3000;
+        });
+        if (!best || penalty < best.penalty) best = { top: top, x: x, rect: rect, penalty: penalty };
+        if (penalty === 0) break;
+      }
+      if (!best) return;
+      item.label.style.left = best.x + "px";
+      item.label.style.top = best.top + "px";
+      // Connector makes the marker's real position unambiguous when labels stack.
+      var start, end;
+      if (best.rect.bottom <= item.y - 8) {
+        start = best.rect.bottom;
+        end = item.y - 8;
+      } else if (best.rect.top >= item.y + 8) {
+        start = item.y + 8;
+        end = best.rect.top;
+      }
+      if (start != null && end > start) {
+        item.leader.style.left = item.x + "px";
+        item.leader.style.top = start + "px";
+        item.leader.style.height = (end - start) + "px";
+        item.leader.style.display = "block";
+      }
+      occupied.push(best.rect);
     });
   }
   function zoomAround(newZoom, x, y) {
@@ -485,10 +586,49 @@ INDEX_HTML = r'''<!doctype html>
     label.className = "person-label";
     var dot = document.createElement("div");
     dot.className = "person-dot";
-    el.appendChild(label);
+    var leader = document.createElement("div");
+    leader.className = "person-leader";
     el.appendChild(dot);
     markerLayer.appendChild(el);
-    return { el: el, label: label };
+    leaderLayer.appendChild(leader);
+    labelLayer.appendChild(label);
+    return { el: el, label: label, leader: leader };
+  }
+  function syncPersonButtons(people) {
+    var live = new Set();
+    people.forEach(function (person) {
+      var id = String(person.id || person.name);
+      var item = markers.get(id);
+      if (!item) return;
+      live.add(id);
+      var button = personButtons.get(id);
+      if (!button) {
+        button = document.createElement("button");
+        button.type = "button";
+        button.addEventListener("click", function () {
+          var target = markers.get(id);
+          if (!target) return;
+          selectedId = id;
+          center = [target.lon, target.lat];
+          // Deliberately do not change zoom or re-fit other markers.
+          personButtons.forEach(function (control, key) {
+            control.setAttribute("aria-pressed", String(key === selectedId));
+          });
+          redraw();
+        });
+        personButtons.set(id, button);
+        peopleControlsEl.appendChild(button);
+      }
+      button.textContent = person.name;
+      button.setAttribute("aria-pressed", String(id === selectedId));
+    });
+    personButtons.forEach(function (button, id) {
+      if (!live.has(id)) {
+        button.remove();
+        personButtons.delete(id);
+        if (selectedId === id) selectedId = null;
+      }
+    });
   }
   function fit(points) {
     if (points.length === 1) {
@@ -527,6 +667,7 @@ INDEX_HTML = r'''<!doctype html>
       }
       item.lat = lat;
       item.lon = lon;
+      item.name = person.name;
       var label = person.name + " · " + ageText(person.lastSeen);
       if (person.battery != null) label += " · батарея " + person.battery + "%";
       item.label.textContent = label; // Never interpret profile names as HTML.
@@ -535,9 +676,12 @@ INDEX_HTML = r'''<!doctype html>
     markers.forEach(function (item, id) {
       if (!visible.has(id)) {
         item.el.remove();
+        item.label.remove();
+        item.leader.remove();
         markers.delete(id);
       }
     });
+    syncPersonButtons(data.people || []);
     if (!fitted && points.length) {
       fitted = true;
       fit(points);
