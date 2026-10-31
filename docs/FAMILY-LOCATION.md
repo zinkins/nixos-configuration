@@ -18,7 +18,7 @@ The 2GIS protocol handling is based on the behavior documented by the MIT-licens
 - The 2GIS access token and selected display names are **not** stored in Git.
 - The service receives the account's 2GIS location feed internally, but `/api/locations` emits only the authenticated account owner (when the token/feed lets it identify that state) and names explicitly listed in `FAMILY_LOCATION_NAMES`.
 - The HTTP service listens only on `127.0.0.1:8085`; browser access goes through `family.home` and Caddy.
-- The map uses OpenStreetMap raster tiles and a small inline JavaScript renderer (no MapLibre, Leaflet, WebGL, external JavaScript CDN or API key). Tile and CDN requests reveal the client IP and viewed map area to the respective public services; no 2GIS access token is sent to either.
+- The map uses OpenStreetMap raster tiles and a small inline JavaScript renderer (no MapLibre, Leaflet, WebGL, external JavaScript CDN or API key). Tile requests reveal the client IP and viewed map area to OpenStreetMap; no 2GIS access token is sent to the map tile provider.
 - `family.home` itself is LAN-facing and has no additional authentication layer, so anyone who can open the dashboard can see the selected locations.
 
 ## One-time local secret configuration
@@ -138,6 +138,10 @@ required. This also supports older browsers without WebGL.
   (subject to the [OSM tile usage policy](https://operations.osmfoundation.org/policies/tiles/)).
 - Controls: pointer dragging, mouse-wheel zoom, +/- buttons and touch dragging.
 - Markers update every 10 seconds without resetting the user's pan or zoom.
+- All names remain visible. If labels overlap, the map shifts the **labels only**
+  vertically (with connector lines); location dots remain on their true coordinates.
+- A row of buttons with names lets users center the map on a person without
+  changing the current zoom level. Buttons retain keyboard focus on refresh.
 - Initial view fits the available locations once; map layout adapts to resizing.
 - Display names are always inserted with `textContent`, not as HTML.
 - Tile errors are reported separately from location API errors.
