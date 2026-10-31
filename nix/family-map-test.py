@@ -1,4 +1,4 @@
-"""Validate the embedded family map is library-independent of Leaflet.
+"""Validate the WebGL-free embedded family map.
 
 Extract inline JS for Node syntax validation; never fetch map tiles or 2GIS data.
 """
@@ -17,16 +17,20 @@ values = [
 ]
 assert len(values) == 1
 html = values[0]
-assert "leaflet" not in html.lower(), "Map must no longer load or call Leaflet"
-assert html.count("maplibre-gl@6.10.0/dist/maplibre-gl.css") == 1
-assert html.count("maplibre-gl@6.10.0/dist/maplibre-gl.js") == 1
-assert "https://tile.openstreetmap.org/{z}/{x}/{y}.png" in html
+assert "leaflet" not in html.lower()
+assert "maplibre" not in html.lower()
+assert "unpkg.com" not in html
+assert '"https://tile.openstreetmap.org/"' in html
+assert "https://www.openstreetmap.org/copyright" in html
+assert 'function project(' in html and 'function unproject(' in html
+assert 'function fit(' in html
+assert 'addEventListener("pointermove"' in html
+assert 'addEventListener("wheel"' in html
 assert "© OpenStreetMap contributors" in html
 assert 'fetch("api/locations"' in html
 assert "10000" in html
-assert "new maplibregl.Marker" in html
-assert "map.fitBounds" in html
-assert "new maplibregl.NavigationControl" in html
+assert "markerLayer.appendChild(el)" in html
+assert "redraw();" in html
 assert "item.label.textContent = label" in html, "Untrusted display names must not become HTML"
 
 inline_scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, flags=re.DOTALL)
