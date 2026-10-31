@@ -257,35 +257,58 @@ INDEX_HTML = r'''<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Геолокация</title>
-  <!-- Raster OpenStreetMap tiles, rendered without a map API key. -->
-  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.10.0/dist/maplibre-gl.css">
+  <!-- OpenStreetMap raster tiles; no WebGL or JavaScript CDN needed. -->
   <style>
     html, body, #map { height: 100%; margin: 0; }
+    #map { position: relative; overflow: hidden; cursor: grab; touch-action: none; user-select: none; }
+    #map.dragging { cursor: grabbing; }
+    .tile-layer, .marker-layer { position: absolute; inset: 0; }
+    .tile-layer img { position: absolute; width: 256px; height: 256px; pointer-events: none; user-select: none; }
+    .marker-layer { pointer-events: none; }
+    .map-controls { position: absolute; z-index: 15; top: 8px; right: 8px; display: flex; flex-direction: column; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 8px #0008; }
+    .map-controls button { border: 0; border-bottom: 1px solid #aaa; padding: 5px 11px; min-width: 34px; background: #fff; color: #111; font: bold 20px system-ui, sans-serif; cursor: pointer; }
+    .map-controls button:last-child { border-bottom: 0; }
+    .map-attribution { position: absolute; z-index: 15; right: 0; bottom: 0; background: #fffd; padding: 2px 5px; font: 10px system-ui, sans-serif; }
+    .map-attribution a { color: #134a76; }
     body { background: #07101d; color: #fff; font-family: system-ui, sans-serif; }
     #status { position: absolute; z-index: 10; top: 8px; left: 8px; right: 56px; display: flex; gap: 6px; flex-wrap: wrap; pointer-events: none; }
     .pill { padding: 5px 8px; border-radius: 999px; background: rgba(2,6,23,.88); border: 1px solid rgba(148,163,184,.45); font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
     .ok { border-color: rgba(52,211,153,.65); }
     .warn { border-color: rgba(251,191,36,.7); }
     .bad { border-color: rgba(248,113,113,.7); }
-    .person-pin { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+    .person-pin { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 4px; transform: translate(-50%, -100%); pointer-events: none; }
     .person-label {
       background: rgba(2,6,23,.92); border: 1px solid rgba(148,163,184,.6);
       color: #fff; padding: 5px 7px; border-radius: 6px; font: 12px system-ui, sans-serif;
       white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.35);
     }
     .person-dot { width: 12px; height: 12px; border-radius: 50%; background: #34d399; border: 2px solid #fff; box-shadow: 0 1px 6px #000b; }
-    .maplibregl-ctrl-attrib { font-size: 11px !important; }
   </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="status"></div>
-<script src="https://unpkg.com/maplibre-gl@6.10.0/dist/maplibre-gl.js"></script>
 <script>
 (function () {
+  "use strict";
+  var mapEl = document.getElementById("map");
   var statusEl = document.getElementById("status");
+  var tileLayer = document.createElement("div");
+  var markerLayer = document.createElement("div");
+  tileLayer.className = "tile-layer";
+  markerLayer.className = "marker-layer";
+  mapEl.appendChild(tileLayer);
+  mapEl.appendChild(markerLayer);
+
+  var zoom = 11;
+  var center = [82.9357, 55.0084];
+  var tiles = new Map();
   var markers = new Map();
   var fitted = false;
+  var tileError = false;
+  var dragging = null;
+  var maxLat = 85.05112878;
+  var tileSize = 256;
 
   function pill(text, cls) {
     var el = document.createElement("span");
@@ -293,32 +316,146 @@ INDEX_HTML = r'''<!doctype html>
     el.textContent = text;
     return el;
   }
-
-  // WebGL is required by MapLibre. Fail visibly instead of leaving a blank map.
-  if (!window.maplibregl || !maplibregl.supported()) {
-    statusEl.appendChild(pill("Карта недоступна: требуется MapLibre и WebGL", "bad"));
-    return;
+  function clamp(value, lo, hi) {
+    return Math.max(lo, Math.min(hi, value));
   }
+  function project(lon, lat, level) {
+    var radians = clamp(lat, -maxLat, maxLat) * Math.PI / 180;
+    var world = tileSize * Math.pow(2, level);
+    return [
+      (lon + 180) / 360 * world,
+      (1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) / 2 * world
+    ];
+  }
+  function unproject(x, y, level) {
+    var world = tileSize * Math.pow(2, level);
+    var nx = ((x % world) + world) % world;
+    var ny = clamp(y, 0, world);
+    return [
+      nx / world * 360 - 180,
+      Math.atan(Math.sinh(Math.PI * (1 - 2 * ny / world))) * 180 / Math.PI
+    ];
+  }
+  function redraw() {
+    var width = mapEl.clientWidth;
+    var height = mapEl.clientHeight;
+    if (!width || !height) return;
+    var cp = project(center[0], center[1], zoom);
+    var left = cp[0] - width / 2;
+    var top = cp[1] - height / 2;
+    var n = Math.pow(2, zoom);
+    var visible = new Set();
 
-  var map = new maplibregl.Map({
-    container: "map",
-    center: [82.9357, 55.0084],
-    zoom: 11,
-    maxZoom: 19,
-    style: {
-      version: 8,
-      sources: {
-        osm: {
-          type: "raster",
-          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-          tileSize: 256,
-          attribution: "© OpenStreetMap contributors"
+    for (var y = Math.max(0, Math.floor(top / tileSize)); y <= Math.min(n - 1, Math.floor((top + height) / tileSize)); y++) {
+      for (var x = Math.floor(left / tileSize); x <= Math.floor((left + width) / tileSize); x++) {
+        var key = zoom + "/" + x + "/" + y;
+        visible.add(key);
+        var img = tiles.get(key);
+        if (!img) {
+          img = document.createElement("img");
+          img.alt = "";
+          img.draggable = false;
+          img.src = "https://tile.openstreetmap.org/" + zoom + "/" + (((x % n) + n) % n) + "/" + y + ".png";
+          img.addEventListener("error", function () {
+            tileError = true;
+            if (!statusEl.textContent.includes("Подложка OpenStreetMap недоступна")) {
+              statusEl.appendChild(pill("Подложка OpenStreetMap недоступна", "warn"));
+            }
+          });
+          tileLayer.appendChild(img);
+          tiles.set(key, img);
         }
-      },
-      layers: [{ id: "osm-tiles", type: "raster", source: "osm" }]
+        img.style.left = (x * tileSize - left) + "px";
+        img.style.top = (y * tileSize - top) + "px";
+      }
     }
+    tiles.forEach(function (img, key) {
+      if (!visible.has(key)) {
+        img.remove();
+        tiles.delete(key);
+      }
+    });
+
+    markers.forEach(function (item) {
+      var p = project(item.lon, item.lat, zoom);
+      var dx = p[0] - cp[0];
+      if (dx > n * tileSize / 2) dx -= n * tileSize;
+      if (dx < -n * tileSize / 2) dx += n * tileSize;
+      var x = width / 2 + dx;
+      var y = height / 2 + p[1] - cp[1];
+      item.el.style.left = x + "px";
+      item.el.style.top = y + "px";
+      item.el.style.display = (x < -120 || x > width + 120 || y < -80 || y > height + 80) ? "none" : "flex";
+    });
+  }
+  function zoomAround(newZoom, x, y) {
+    newZoom = clamp(newZoom, 1, 19);
+    if (newZoom === zoom) return;
+    var p = project(center[0], center[1], zoom);
+    var worldX = p[0] + x - mapEl.clientWidth / 2;
+    var worldY = p[1] + y - mapEl.clientHeight / 2;
+    var scale = Math.pow(2, newZoom - zoom);
+    zoom = newZoom;
+    center = unproject(worldX * scale - x + mapEl.clientWidth / 2,
+                       worldY * scale - y + mapEl.clientHeight / 2, zoom);
+    redraw();
+  }
+  function addControl(text, label, delta) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.textContent = text;
+    button.setAttribute("aria-label", label);
+    button.addEventListener("click", function () {
+      zoomAround(zoom + delta, mapEl.clientWidth / 2, mapEl.clientHeight / 2);
+    });
+    return button;
+  }
+  var controls = document.createElement("div");
+  controls.className = "map-controls";
+  controls.appendChild(addControl("+", "Приблизить", 1));
+  controls.appendChild(addControl("−", "Отдалить", -1));
+  mapEl.appendChild(controls);
+
+  var attribution = document.createElement("div");
+  attribution.className = "map-attribution";
+  var link = document.createElement("a");
+  link.href = "https://www.openstreetmap.org/copyright";
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = "© OpenStreetMap contributors";
+  attribution.appendChild(link);
+  mapEl.appendChild(attribution);
+
+  mapEl.addEventListener("pointerdown", function (event) {
+    if (event.button !== 0 || event.target.closest("button, a")) return;
+    dragging = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    mapEl.classList.add("dragging");
+    if (mapEl.setPointerCapture) mapEl.setPointerCapture(event.pointerId);
   });
-  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+  mapEl.addEventListener("pointermove", function (event) {
+    if (!dragging || dragging.id !== event.pointerId) return;
+    var p = project(center[0], center[1], zoom);
+    center = unproject(p[0] - (event.clientX - dragging.x),
+                       p[1] - (event.clientY - dragging.y), zoom);
+    dragging.x = event.clientX;
+    dragging.y = event.clientY;
+    redraw();
+  });
+  function finishDrag(event) {
+    if (dragging && dragging.id === event.pointerId) {
+      dragging = null;
+      mapEl.classList.remove("dragging");
+    }
+  }
+  mapEl.addEventListener("pointerup", finishDrag);
+  mapEl.addEventListener("pointercancel", finishDrag);
+  mapEl.addEventListener("lostpointercapture", finishDrag);
+  mapEl.addEventListener("wheel", function (event) {
+    event.preventDefault();
+    var rect = mapEl.getBoundingClientRect();
+    zoomAround(zoom + (event.deltaY < 0 ? 1 : -1),
+               event.clientX - rect.left, event.clientY - rect.top);
+  }, { passive: false });
 
   function ageText(ms) {
     if (!ms) return "нет данных";
@@ -330,30 +467,48 @@ INDEX_HTML = r'''<!doctype html>
     if (hours < 24) return hours + " ч назад";
     return Math.floor(hours / 24) + " дн назад";
   }
-
   function renderStatus(data) {
     statusEl.replaceChildren();
     if (!data.configured) {
       statusEl.appendChild(pill("2ГИС: требуется DGIS_ACCESS_TOKEN", "bad"));
-      return;
+    } else {
+      statusEl.appendChild(pill(data.connected ? "2ГИС: подключен" : "2ГИС: переподключение", data.connected ? "ok" : "warn"));
+      if (!data.selfSeen) statusEl.appendChild(pill("Своя позиция не опознана автоматически", "warn"));
+      if (data.missing && data.missing.length) statusEl.appendChild(pill("Нет данных: " + data.missing.join(", "), "warn"));
     }
-    statusEl.appendChild(pill(data.connected ? "2ГИС: подключен" : "2ГИС: переподключение", data.connected ? "ok" : "warn"));
-    if (!data.selfSeen) statusEl.appendChild(pill("Своя позиция не опознана автоматически", "warn"));
-    if (data.missing && data.missing.length) statusEl.appendChild(pill("Нет данных: " + data.missing.join(", "), "warn"));
+    if (tileError) statusEl.appendChild(pill("Подложка OpenStreetMap недоступна", "warn"));
   }
-
-  function createMarker() {
-    var element = document.createElement("div");
-    element.className = "person-pin";
+  function marker() {
+    var el = document.createElement("div");
+    el.className = "person-pin";
     var label = document.createElement("div");
     label.className = "person-label";
     var dot = document.createElement("div");
     dot.className = "person-dot";
-    element.appendChild(label);
-    element.appendChild(dot);
-    return { marker: new maplibregl.Marker({ element: element, anchor: "bottom" }).addTo(map), label: label };
+    el.appendChild(label);
+    el.appendChild(dot);
+    markerLayer.appendChild(el);
+    return { el: el, label: label };
   }
-
+  function fit(points) {
+    if (points.length === 1) {
+      center = points[0];
+      zoom = 15;
+    } else {
+      for (var z = 15; z > 1; z--) {
+        var xx = points.map(function (p) { return project(p[0], p[1], z)[0]; });
+        var yy = points.map(function (p) { return project(p[0], p[1], z)[1]; });
+        if (Math.max.apply(null, xx) - Math.min.apply(null, xx) <= Math.max(1, mapEl.clientWidth - 70) &&
+            Math.max.apply(null, yy) - Math.min.apply(null, yy) <= Math.max(1, mapEl.clientHeight - 110)) break;
+      }
+      zoom = z;
+      var xs = points.map(function (p) { return project(p[0], p[1], zoom)[0]; });
+      var ys = points.map(function (p) { return project(p[0], p[1], zoom)[1]; });
+      center = unproject((Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2,
+                         (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2, zoom);
+    }
+    redraw();
+  }
   function render(data) {
     renderStatus(data);
     var visible = new Set();
@@ -362,41 +517,34 @@ INDEX_HTML = r'''<!doctype html>
       var lat = Number(person.lat);
       var lon = Number(person.lon);
       if (person.lat == null || person.lon == null || !Number.isFinite(lat) || !Number.isFinite(lon) ||
-          lat < -85 || lat > 85 || lon < -180 || lon > 180) return;
-
+          lat < -maxLat || lat > maxLat || lon < -180 || lon > 180) return;
       var id = String(person.id || person.name);
       visible.add(id);
       var item = markers.get(id);
       if (!item) {
-        item = createMarker();
+        item = marker();
         markers.set(id, item);
       }
-      item.marker.setLngLat([lon, lat]);
+      item.lat = lat;
+      item.lon = lon;
       var label = person.name + " · " + ageText(person.lastSeen);
       if (person.battery != null) label += " · батарея " + person.battery + "%";
-      item.label.textContent = label;  // Avoid injecting untrusted profile names as HTML.
-      points.push([lon, lat]);         // MapLibre uses [longitude, latitude].
+      item.label.textContent = label; // Never interpret profile names as HTML.
+      points.push([lon, lat]);
     });
-
     markers.forEach(function (item, id) {
       if (!visible.has(id)) {
-        item.marker.remove();
+        item.el.remove();
         markers.delete(id);
       }
     });
-
-    // Fit only once: subsequent 10-second updates must not undo the user's pan/zoom.
-    if (!fitted && points.length > 0) {
+    if (!fitted && points.length) {
       fitted = true;
-      if (points.length === 1) map.jumpTo({ center: points[0], zoom: 15 });
-      else {
-        var bounds = new maplibregl.LngLatBounds();
-        points.forEach(function (point) { bounds.extend(point); });
-        map.fitBounds(bounds, { padding: { top: 75, right: 35, bottom: 35, left: 35 }, maxZoom: 15, duration: 0 });
-      }
+      fit(points);
+    } else {
+      redraw();
     }
   }
-
   async function refresh() {
     try {
       var response = await fetch("api/locations", { cache: "no-store" });
@@ -406,7 +554,12 @@ INDEX_HTML = r'''<!doctype html>
       statusEl.replaceChildren(pill("Локальный API недоступен", "bad"));
     }
   }
-
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(redraw).observe(mapEl);
+  } else {
+    window.addEventListener("resize", redraw);
+  }
+  redraw();
   refresh();
   setInterval(refresh, 10000);
 })();
