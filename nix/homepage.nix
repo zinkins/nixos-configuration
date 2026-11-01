@@ -5,15 +5,15 @@ let
   statusPort = 8083;
   redsocksPort = 12345;
 
-  # api.open-meteo.com's only A record. Our upstream ISP blocks this Hetzner
-  # range directly, and homepage's own weather-widget HTTP client is a raw
+  # api.open-meteo.com A record returned for this host. Our upstream ISP blocks
+  # this Hetzner range directly, and homepage's weather widget uses a raw
   # https.Agent request with no proxy support of any kind (no HTTPS_PROXY,
   # no NODE_USE_ENV_PROXY — those only affect the global fetch(), which this
   # widget doesn't use). So the only way to route it through the loopback
   # SOCKS5 VPN proxy is a transparent redirect below the application: iptables
   # sends locally-generated connections to this IP:443 into redsocks, which
   # relays them over the SOCKS5 proxy without homepage knowing a proxy exists.
-  openMeteoIp = "94.130.142.35";
+  openMeteoIp = "157.90.83.168";
 
   # AmneziaWG's assigned tunnel address (nix/amnezia.nix binds media-vpn-proxy's
   # outbound socket to this address so its packets hit the awg0 policy route).
