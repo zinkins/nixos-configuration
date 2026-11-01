@@ -5,13 +5,29 @@ let
   python = pkgs.python3.withPackages (ps: [ ps.tomlkit ]);
   configEditor = ./herdr-settings.py;
   dailyRefresh = pkgs.writeShellScript "herdr-refresh-manifests" ''
-    # Don't contact herdr.dev when no Herdr instance is running for this user.
+    set -euo pipefail
+
+    # An hourly local check avoids missing updates for users who normally run
+    # Herdr only during the day. It must not imply hourly network requests.
     if ! ${pkgs.procps}/bin/pgrep -u "$(${pkgs.coreutils}/bin/id -u)" -x herdr >/dev/null; then
       echo "Herdr is not running; skipping manifest update."
       exit 0
     fi
 
-    exec ${herdr}/bin/herdr server update-agent-manifests
+    state_dir="$HOME/.local/state/herdr"
+    stamp="$state_dir/last-scheduled-manifest-refresh"
+    now="$(${pkgs.coreutils}/bin/date +%s)"
+    if [ -r "$stamp" ]; then
+      last="$(${pkgs.coreutils}/bin/cat "$stamp")"
+      if [[ "$last" =~ ^[0-9]+$ ]] && (( now >= last && now - last < 86400 )); then
+        echo "Herdr manifests were checked less than 24 hours ago; skipping."
+        exit 0
+      fi
+    fi
+
+    ${herdr}/bin/herdr server update-agent-manifests
+    ${pkgs.coreutils}/bin/mkdir -p "$state_dir"
+    printf '%s\n' "$now" > "$stamp"
   '';
 in
 {
@@ -43,9 +59,11 @@ in
     description = "Daily Herdr agent-detection manifest refresh";
     wantedBy = [ "timers.target" ];
     timerConfig = {
-      OnCalendar = "daily";
+      # No network request unless Herdr is running and 24h have passed since
+      # the previous successful scheduled refresh.
+      OnCalendar = "hourly";
       Persistent = true;
-      RandomizedDelaySec = "15min";
+      RandomizedDelaySec = "10min";
       Unit = "herdr-manifest-refresh.service";
     };
   };
