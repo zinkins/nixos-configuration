@@ -40,6 +40,7 @@ Preserve these unless the task explicitly changes the architecture:
 - [`docs/BYPARR.md`](docs/BYPARR.md)
 - [`docs/FAMILY-LOCATION.md`](docs/FAMILY-LOCATION.md)
 - [`docs/HOME-VPN.md`](docs/HOME-VPN.md)
+- [`docs/HERDR.md`](docs/HERDR.md)
 - [`docs/MEDIA-SETUP.md`](docs/MEDIA-SETUP.md)
 - [`docs/REVERSE-PROXY.md`](docs/REVERSE-PROXY.md)
 - [`docs/SAMBA.md`](docs/SAMBA.md)
@@ -63,6 +64,7 @@ Preserve these unless the task explicitly changes the architecture:
 - [`nix/ai-vpn.nix`](nix/ai-vpn.nix)
 - [`nix/byparr.nix`](nix/byparr.nix)
 - [`nix/auto-update.nix`](nix/auto-update.nix)
+- [`nix/herdr.nix`](nix/herdr.nix)
 - [`nix/home-vpn.nix`](nix/home-vpn.nix)
 - [`nix/samba.nix`](nix/samba.nix)
 
