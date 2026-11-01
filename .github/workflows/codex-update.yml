@@ -1,4 +1,4 @@
-name: Update Codex
+name: Update Codex and Herdr
 
 on:
   workflow_dispatch:
@@ -8,18 +8,27 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  statuses: write
 
 concurrency:
-  group: codex-update
+  group: codex-herdr-update
   cancel-in-progress: false
 
 jobs:
   update:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 65
     steps:
+      - name: Require a token that triggers pull_request checks
+        env:
+          AUTO_UPDATE_TOKEN: ${{ secrets.AUTO_UPDATE_TOKEN }}
+        run: |
+          if [ -z "$AUTO_UPDATE_TOKEN" ]; then
+            echo "::error::Add repository Actions secret AUTO_UPDATE_TOKEN (fine-grained GitHub PAT with Contents and Pull requests read/write)."
+            echo "::error::The default GITHUB_TOKEN cannot trigger the required Validate pull_request check for a bot-created PR."
+            exit 1
+          fi
+
       - name: Checkout production configuration
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -33,18 +42,21 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - name: Update only the Codex package source
+      - name: Update only the Codex and Herdr package sources
         id: update
         run: |
-          jq -S '.nodes | del(."codex-nixpkgs")' flake.lock > "$RUNNER_TEMP/other-inputs.json"
-          nix flake update codex-nixpkgs
-          jq -S '.nodes | del(."codex-nixpkgs")' flake.lock | cmp "$RUNNER_TEMP/other-inputs.json" -
+          set -euo pipefail
+          # Shared transitive flake-utils/systems dependencies belong to herdr-nix.
+          # In particular, the stable host nixpkgs lock must never change.
+          jq -S '.nodes | del(."codex-nixpkgs", ."herdr-nix", ."flake-utils", ."systems")' flake.lock > "$RUNNER_TEMP/other-inputs.json"
+          nix flake update codex-nixpkgs herdr-nix
+          jq -S '.nodes | del(."codex-nixpkgs", ."herdr-nix", ."flake-utils", ."systems")' flake.lock | cmp "$RUNNER_TEMP/other-inputs.json" -
           if ! git diff --quiet -- flake.lock; then
             echo 'changed=true' >> "$GITHUB_OUTPUT"
           fi
 
-      # GITHUB_TOKEN-created PRs do not trigger pull_request CI. Run the
-      # same validation here before publishing or updating the PR instead.
+      # Prevalidate before creating a production-bound PR. A separate
+      # pull_request validation is required by the master ruleset as well.
       - name: Check flake
         if: steps.update.outputs.changed == 'true'
         run: nix flake check --show-trace
@@ -53,34 +65,42 @@ jobs:
         if: steps.update.outputs.changed == 'true'
         run: nix build .#nixosConfigurations.nixos.config.system.build.toplevel --no-link --print-build-logs
 
-      - name: Create or update the Codex PR
+      # A PAT (not the default GITHUB_TOKEN) makes the real pull_request
+      # Validate check run. Never bypass master ruleset or spoof check status.
+      - name: Create or update the checked package-update PR
         id: cpr
+        if: steps.update.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
+          token: ${{ secrets.AUTO_UPDATE_TOKEN }}
+          branch-token: ${{ secrets.AUTO_UPDATE_TOKEN }}
           add-paths: flake.lock
-          branch: codex/update-codex
+          branch: automation/update-codex-herdr
           base: master
           delete-branch: true
-          commit-message: 'chore(codex): update package source'
-          title: 'chore(codex): update package source'
+          commit-message: 'chore(tools): update Codex and Herdr package sources'
+          title: 'chore(tools): update Codex and Herdr package sources'
           body: |
-            Updates only the pinned Codex Nixpkgs input and its package dependencies.
-            The stable host Nixpkgs input is unchanged. Codex keeps its VPN wrapper.
+            Update only the pinned Codex Nixpkgs and Herdr Nix package
+            inputs (and Herdr's transitive flake inputs) in flake.lock.
+            The stable host nixpkgs input and AI VPN isolation are unchanged.
 
-            Validation before this PR was created or updated: `nix flake check`
-            and a full NixOS system build. See the Update Codex workflow run.
-            Merge manually to deploy through the existing configuration sync timer.
+            The updater ran `nix flake check` and built the full NixOS system
+            before creating this PR. GitHub's required **Validate** check must
+            also pass before the PR can auto-merge. A failed check leaves this
+            PR open for inspection; the server never deploys an unmerged PR.
 
-      # PRs created with GITHUB_TOKEN cannot trigger pull_request checks.
-      # Publish the successful pre-PR validation on the generated commit.
-      - name: Publish Codex PR validation status
-        if: steps.update.outputs.changed == 'true' && steps.cpr.outputs.pull-request-head-sha != ''
+      # GitHub's master ruleset requires the "Validate" Actions check.
+      # GitHub-native auto-merge waits for the real pull_request workflow,
+      # which is triggered by the fine-grained PAT used to publish the PR.
+      - name: Auto-merge only after required checks pass
+        if: steps.cpr.outputs.pull-request-number != '' && (steps.cpr.outputs.pull-request-operation == 'created' || steps.cpr.outputs.pull-request-operation == 'updated')
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.AUTO_UPDATE_TOKEN }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
           PR_HEAD_SHA: ${{ steps.cpr.outputs.pull-request-head-sha }}
         run: |
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${PR_HEAD_SHA}" \
-            -f state=success \
-            -f context='codex-update / NixOS validated' \
-            -f description='nix flake check and full NixOS build passed' \
-            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          set -euo pipefail
+          test -n "$PR_HEAD_SHA"
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --auto --squash --match-head-commit "$PR_HEAD_SHA"
