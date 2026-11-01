@@ -20,6 +20,7 @@
       ./ai-vpn.nix
       ./byparr.nix
       ./auto-update.nix
+      ./herdr.nix
       ./home-vpn.nix
       ./samba.nix
     ];
