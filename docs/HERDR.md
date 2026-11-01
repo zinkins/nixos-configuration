@@ -2,9 +2,14 @@
 
 Herdr is installed from `inputs.herdr-nix`, pinned in the repository's
 `flake.lock`. The binary does not self-update inside Nix's immutable store.
-To update the Herdr **application**, update the `herdr-nix` flake input in
-a reviewed PR and merge it. The existing `nixos-config-sync.timer` then
-deploys the new package; that timer does **not** update flake inputs on its own.
+Herdr **application** releases are updated by the same daily GitHub Actions
+workflow as Codex (`.github/workflows/codex-update.yml`): it updates the
+`herdr-nix` flake input, validates the full NixOS system, and uses
+GitHub-native PR auto-merge only after the required `Validate` check passes.
+This requires the one-time `AUTO_UPDATE_TOKEN` secret documented in
+[`AUTO-UPDATE.md`](AUTO-UPDATE.md). After the PR merges, the existing
+`nixos-config-sync.timer` deploys the new package. Nix does not modify
+the running binary in place.
 
 ## Background connections
 

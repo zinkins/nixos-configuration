@@ -45,36 +45,68 @@ The service state is stored under:
 
 Logs are kept in the systemd journal.
 
-## Codex package updates
+## Automatic Codex and Herdr updates
 
-`.github/workflows/codex-update.yml` runs daily at 03:23 UTC and can also be
-started manually from the **Update Codex** workflow on `master`.
-It updates only the `codex-nixpkgs` input in `flake.lock`, checks the flake,
-and builds the complete NixOS system before creating or updating one PR on
-`codex/update-codex`. A failed check or build prevents publishing the update.
-The stable host `nixpkgs` input and the VPN wrapper are preserved.
+`.github/workflows/codex-update.yml` (the **Update Codex and Herdr** GitHub
+Actions workflow) runs daily at **03:23 UTC**, or manually via
+**Actions → Update Codex and Herdr → Run workflow**.
 
-Updates follow Codex availability in `nixos-unstable`, so they can lag behind
-OpenAI releases. Input revisions can also update Codex dependencies without
-changing the Codex version. No PR is created when the lock file is unchanged.
+1. Updates **only** the `codex-nixpkgs` and `herdr-nix` flake inputs and
+   Herdr's transitive flake dependencies; protects the stable host `nixpkgs`.
+2. If `flake.lock` changes, runs `nix flake check --show-trace` and builds the
+   **complete NixOS system** before publishing any PR.
+3. Creates/updates one PR (`automation/update-codex-herdr`) using a dedicated
+   GitHub token, which causes the normal `pull_request` **Validate** check to run.
+4. Enables GitHub-native **auto-merge** for that PR with a locked head SHA.
+   GitHub merges only when the required **Validate** check passes.
+5. Once the PR is merged, `nixos-config-sync.timer` on the server pulls master,
+   builds the full system, dry-activates and switches it (approximately every 15
+   minutes). If host preflight/activation fails, the updater rolls back.
 
-GitHub Actions must be allowed to create pull requests in repository
-**Settings > Actions > General > Workflow permissions**. No personal token
-is needed. PRs created with `GITHUB_TOKEN` do not trigger the usual
-`pull_request` workflow, so the updater runs the same flake check and full
-system build before creating or updating them. After successful validation,
-it also posts a **codex-update / NixOS validated** commit status on the PR head,
-linking to the successful **Update Codex** run. This avoids a second NixOS
-build. See the
-[create-pull-request documentation](https://github.com/peter-evans/create-pull-request#token).
-This status does not run or replace the separate **Validate** GitHub Actions
-workflow. If branch protection requires that specific check, close and reopen
-the generated PR to trigger it before merging.
+A failed flake check, system build or required PR check **blocks deployment**.
+A failed PR remains for diagnosis. The updater does not alter network/VPN
+settings, upgrade the stable Nixpkgs input, force-push master, or bypass rulesets.
 
-Review and merge the PR manually. The existing configuration sync timer then
-applies it within roughly 15 minutes; the workflow never merges or deploys.
-Already running Codex processes keep their current binary until restarted.
-To roll back, revert the update PR and merge that revert through the same path.
+Updates follow Codex availability in `nixos-unstable` and Herdr availability
+in `herdrdev/herdr-nix`: either may lag behind its upstream application release.
+A new input revision does not always imply a different package version. An
+already-running Codex or Herdr process may need restarting to use the upgraded
+binary. Herdr's separate daily detection-manifest refresh is configured in
+[`HERDR.md`](HERDR.md); it is not the application version updater.
+
+### One-time GitHub authorization (required)
+
+GitHub currently requires a successful `Validate` check **from GitHub
+Actions** on any PR targeting master. PRs created using a workflow's default
+`GITHUB_TOKEN` do not trigger an unattended regular `pull_request` check;
+a manually dispatched workflow check does not satisfy this particular
+required-check rule. The automation therefore needs a one-time repository
+Actions secret named **`AUTO_UPDATE_TOKEN`**.
+
+1. Create a **fine-grained GitHub personal access token** limited to the
+   `zinkins/nixos-configuration` repository, with
+   **Contents: Read and write** and **Pull requests: Read and write**.
+   Choose an appropriate expiration and rotate before it expires.
+2. Go to repository **Settings → Secrets and variables → Actions →
+   New repository secret**, name it `AUTO_UPDATE_TOKEN` and paste the
+   token **there**, not in Git, PR comments or chat.
+3. Verify that **Settings → Actions → General → Workflow permissions →
+   Allow GitHub Actions to create and approve pull requests** is enabled.
+   Repository **Settings → General → Pull Requests → Allow auto-merge**
+   must also be enabled (the workflow never bypasses branch protection).
+4. Trigger **Update Codex and Herdr** once in GitHub Actions and verify that
+   any generated PR receives a normal `Validate` check and auto-merges
+   only after it succeeds.
+
+If the secret is absent or expired, the workflow fails early without opening
+a PR or altering master. This is intentional: no protection bypass and no
+fallback to manual-approval bot PRs. If there is no changed input revision,
+no PR is needed.
+
+To roll back an automatically merged update, revert the merged commit via a
+new PR and let the existing sync timer apply it. New versions may still have
+runtime issues despite passing build tests; inspect the system journal if
+problems arise.
 
 ## First activation
 
