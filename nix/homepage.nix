@@ -41,11 +41,76 @@ let
     import json
     import os
     import subprocess
+    import threading
+    import time
+    from datetime import datetime
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     IP = "${pkgs.iproute2}/bin/ip"
     CURL = "${pkgs.curl}/bin/curl"
     ZPOOL = "${pkgs.zfs}/bin/zpool"
+
+    # The same Open-Meteo URL/IP and transparent VPN route used by Homepage.
+    # Fetch locally so CustomAPI's dynamic-list can display API-derived clock
+    # times instead of its otherwise static per-row labels.
+    WEATHER_URL = (
+        "https://api.open-meteo.com/v1/forecast?"
+        "latitude=55.0084&longitude=82.9357&timezone=Asia%2FNovosibirsk"
+        "&forecast_hours=25&wind_speed_unit=ms"
+        "&hourly=time,temperature_2m,precipitation_probability,wind_speed_10m"
+    )
+    WEATHER_CACHE = {"payload": None, "expires": 0}
+    WEATHER_LOCK = threading.Lock()
+
+    def weather_forecast():
+        with WEATHER_LOCK:
+            now = time.monotonic()
+            if WEATHER_CACHE["payload"] is not None and now < WEATHER_CACHE["expires"]:
+                return WEATHER_CACHE["payload"]
+
+            try:
+                response = subprocess.run(
+                    [
+                        CURL, "--ipv4", "--noproxy", "*",
+                        "--resolve", "api.open-meteo.com:443:${openMeteoIp}",
+                        "--fail", "--silent", "--show-error",
+                        "--connect-timeout", "5", "--max-time", "15",
+                        WEATHER_URL,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=17,
+                )
+                hourly = json.loads(response.stdout)["hourly"]
+                forecast = []
+                # Open-Meteo returns local times because the request includes
+                # timezone=Asia/Novosibirsk. The first element is this hour.
+                for index in (0, 6, 12, 18, 24):
+                    timestamp = datetime.fromisoformat(hourly["time"][index])
+                    temperature = float(hourly["temperature_2m"][index])
+                    rain = float(hourly["precipitation_probability"][index])
+                    wind = float(hourly["wind_speed_10m"][index])
+                    forecast.append({
+                        "time": timestamp.strftime("%d.%m %H:%M"),
+                        "forecast": (
+                            f"{temperature:.0f}° · осадки {rain:.0f}%"
+                            f" · ветер {wind:.0f} м/с"
+                        ),
+                    })
+                payload = {"hours": forecast}
+            except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError) as exc:
+                # Serve last known values during a temporary outage, avoiding
+                # an empty dashboard. The timestamps remain absolute.
+                if WEATHER_CACHE["payload"] is not None:
+                    print(f"Weather refresh failed; serving cached forecast: {exc}", flush=True)
+                    WEATHER_CACHE["expires"] = now + 60
+                    return WEATHER_CACHE["payload"]
+                raise
+
+            WEATHER_CACHE["payload"] = payload
+            WEATHER_CACHE["expires"] = now + 600
+            return payload
 
     def run(command, timeout=3):
         try:
@@ -107,17 +172,26 @@ let
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            if self.path != "/status":
+            if self.path == "/weather":
+                try:
+                    payload = weather_forecast()
+                except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError) as exc:
+                    print(f"Weather forecast unavailable: {exc}", flush=True)
+                    payload = {"error": "Weather forecast is unavailable"}
+                    self.send_response(502)
+                else:
+                    self.send_response(200)
+            elif self.path == "/status":
+                payload = {}
+                payload.update(vpn_status())
+                payload.update(zfs_status())
+                self.send_response(200)
+            else:
                 self.send_response(404)
                 self.end_headers()
                 return
 
-            payload = {}
-            payload.update(vpn_status())
-            payload.update(zfs_status())
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-
-            self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
@@ -256,63 +330,27 @@ in
 
     services = [
       {
-        # The built-in Open-Meteo information widget shows current conditions.
-        # This card shows a rolling 24-hour forecast from the current hour,
-        # rather than midnight-to-midnight. Open-Meteo's forecast_hours=25
-        # includes time indices 0, 6, 12, 18 and 24.
-        # CustomAPI cannot aggregate arbitrary hourly arrays, so show
-        # point-in-time forecasts; do not label daily values as 24-hour totals.
-        # Both weather widgets use the same host and VPN redirect.
+        # CustomAPI does not support API-derived dynamic labels in list mode.
+        # Serve five timestamped rows from the loopback weather endpoint instead.
+        # The API supplies real Novosibirsk local date/time for every forecast;
+        # intervals remain 0, 6, 12, 18, and 24 hours from its current hour.
         "Погода" = [
           {
             "Прогноз на 24 часа" = {
               icon = "mdi-weather-partly-cloudy";
-              description = "Новосибирск · температура / вероятность осадков";
+              description = "Новосибирск · время / температура / осадки / ветер";
               widget = {
                 type = "customapi";
-                url = "https://api.open-meteo.com/v1/forecast?latitude=55.0084&longitude=82.9357&timezone=Asia%2FNovosibirsk&forecast_hours=25&wind_speed_unit=ms&hourly=temperature_2m,precipitation_probability,wind_speed_10m";
+                url = "http://127.0.0.1:${toString statusPort}/weather";
                 refreshInterval = 1800000;
-                display = "list";
-                mappings = [
-                  {
-                    field = "hourly.temperature_2m.0";
-                    label = "Сейчас";
-                    format = "number";
-                    suffix = "°";
-                    additionalField = { field = "hourly.precipitation_probability.0"; format = "number"; suffix = "%"; };
-                  }
-                  {
-                    field = "hourly.temperature_2m.6";
-                    label = "Через 6 ч";
-                    format = "number";
-                    suffix = "°";
-                    additionalField = { field = "hourly.precipitation_probability.6"; format = "number"; suffix = "%"; };
-                  }
-                  {
-                    field = "hourly.temperature_2m.12";
-                    label = "Через 12 ч";
-                    format = "number";
-                    suffix = "°";
-                    additionalField = { field = "hourly.precipitation_probability.12"; format = "number"; suffix = "%"; };
-                  }
-                  {
-                    field = "hourly.temperature_2m.18";
-                    label = "Через 18 ч";
-                    format = "number";
-                    suffix = "°";
-                    additionalField = { field = "hourly.precipitation_probability.18"; format = "number"; suffix = "%"; };
-                  }
-                  {
-                    field = "hourly.temperature_2m.24";
-                    label = "Через 24 ч";
-                    format = "number";
-                    suffix = "°";
-                    additionalField = { field = "hourly.precipitation_probability.24"; format = "number"; suffix = "%"; };
-                  }
-                  { field = "hourly.wind_speed_10m.0"; label = "Ветер сейчас"; format = "number"; suffix = "м/с"; }
-                  { field = "hourly.wind_speed_10m.12"; label = "Ветер через 12 ч"; format = "number"; suffix = "м/с"; }
-                  { field = "hourly.wind_speed_10m.24"; label = "Ветер через 24 ч"; format = "number"; suffix = "м/с"; }
-                ];
+                display = "dynamic-list";
+                mappings = {
+                  items = "hours";
+                  name = "time";
+                  label = "forecast";
+                  limit = 5;
+                  format = "text";
+                };
               };
             };
           }
