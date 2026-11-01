@@ -57,7 +57,7 @@ let
         "https://api.open-meteo.com/v1/forecast?"
         "latitude=55.0084&longitude=82.9357&timezone=Asia%2FNovosibirsk"
         "&forecast_hours=25&wind_speed_unit=ms"
-        "&hourly=time,temperature_2m,precipitation_probability,wind_speed_10m"
+        "&hourly=temperature_2m,precipitation_probability,wind_speed_10m"
     )
     WEATHER_CACHE = {"payload": None, "expires": 0}
     WEATHER_LOCK = threading.Lock()
