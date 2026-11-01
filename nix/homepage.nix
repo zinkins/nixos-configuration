@@ -256,48 +256,62 @@ in
 
     services = [
       {
-        # The openmeteo info widget above only shows current conditions, so the
-        # day forecast is a customapi card on the same API host (and therefore
-        # the same VPN redirect below). hourly.temperature_2m.N is hour N of
-        # today in the given timezone, since forecast_days=1.
+        # The built-in Open-Meteo information widget shows current conditions.
+        # This card shows a rolling 24-hour forecast from the current hour,
+        # rather than midnight-to-midnight. Open-Meteo's forecast_hours=25
+        # includes time indices 0, 6, 12, 18 and 24.
+        # CustomAPI cannot aggregate arbitrary hourly arrays, so show
+        # point-in-time forecasts; do not label daily values as 24-hour totals.
+        # Both weather widgets use the same host and VPN redirect.
         "Погода" = [
           {
-            "Прогноз на сегодня" = {
+            "Прогноз на 24 часа" = {
               icon = "mdi-weather-partly-cloudy";
-              description = "Новосибирск";
+              description = "Новосибирск · температура / вероятность осадков";
               widget = {
                 type = "customapi";
-                url = "https://api.open-meteo.com/v1/forecast?latitude=55.0084&longitude=82.9357&timezone=Asia%2FNovosibirsk&forecast_days=1&wind_speed_unit=ms&hourly=temperature_2m&daily=temperature_2m_min,temperature_2m_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max";
+                url = "https://api.open-meteo.com/v1/forecast?latitude=55.0084&longitude=82.9357&timezone=Asia%2FNovosibirsk&forecast_hours=25&wind_speed_unit=ms&hourly=temperature_2m,precipitation_probability,wind_speed_10m";
                 refreshInterval = 1800000;
                 display = "list";
                 mappings = [
-                  { field = "hourly.temperature_2m.8"; label = "Утро (08:00)"; format = "number"; suffix = "°"; }
-                  { field = "hourly.temperature_2m.14"; label = "День (14:00)"; format = "number"; suffix = "°"; }
-                  { field = "hourly.temperature_2m.20"; label = "Вечер (20:00)"; format = "number"; suffix = "°"; }
-                  { field = "hourly.temperature_2m.2"; label = "Ночь (02:00)"; format = "number"; suffix = "°"; }
                   {
-                    field = "daily.temperature_2m_min.0";
-                    label = "Мин / макс";
+                    field = "hourly.temperature_2m.0";
+                    label = "Сейчас";
                     format = "number";
                     suffix = "°";
-                    additionalField = {
-                      field = "daily.temperature_2m_max.0";
-                      format = "number";
-                      suffix = "°";
-                    };
+                    additionalField = { field = "hourly.precipitation_probability.0"; format = "number"; suffix = "%"; };
                   }
                   {
-                    field = "daily.precipitation_probability_max.0";
-                    label = "Осадки";
+                    field = "hourly.temperature_2m.6";
+                    label = "Через 6 ч";
                     format = "number";
-                    suffix = "%";
-                    additionalField = {
-                      field = "daily.precipitation_sum.0";
-                      format = "float";
-                      suffix = "мм";
-                    };
+                    suffix = "°";
+                    additionalField = { field = "hourly.precipitation_probability.6"; format = "number"; suffix = "%"; };
                   }
-                  { field = "daily.wind_speed_10m_max.0"; label = "Ветер до"; format = "number"; suffix = "м/с"; }
+                  {
+                    field = "hourly.temperature_2m.12";
+                    label = "Через 12 ч";
+                    format = "number";
+                    suffix = "°";
+                    additionalField = { field = "hourly.precipitation_probability.12"; format = "number"; suffix = "%"; };
+                  }
+                  {
+                    field = "hourly.temperature_2m.18";
+                    label = "Через 18 ч";
+                    format = "number";
+                    suffix = "°";
+                    additionalField = { field = "hourly.precipitation_probability.18"; format = "number"; suffix = "%"; };
+                  }
+                  {
+                    field = "hourly.temperature_2m.24";
+                    label = "Через 24 ч";
+                    format = "number";
+                    suffix = "°";
+                    additionalField = { field = "hourly.precipitation_probability.24"; format = "number"; suffix = "%"; };
+                  }
+                  { field = "hourly.wind_speed_10m.0"; label = "Ветер сейчас"; format = "number"; suffix = "м/с"; }
+                  { field = "hourly.wind_speed_10m.12"; label = "Ветер через 12 ч"; format = "number"; suffix = "м/с"; }
+                  { field = "hourly.wind_speed_10m.24"; label = "Ветер через 24 ч"; format = "number"; suffix = "м/с"; }
                 ];
               };
             };
