@@ -158,12 +158,21 @@ separately after merging; CI validates the NixOS build, not the live server.
 
 ## Backups and recovery
 
-**Immich is not itself a backup.** Keep independent, regularly tested backups
-of both (1) `/myraid1/nas/Photos` including original assets and (2) the Immich
-PostgreSQL database/metadata. A ZFS mirror or snapshots on the same pool do
-not protect against every hardware, administrative or ransomware failure.
-Make at least one copy to another device/location before relying on Immich as
-the only place where family photos exist.
+**Immich is not itself a backup.** The optional Mail.ru Cloud Restic backup
+service in `nix/immich-mailru-backup.nix` is set to run daily with encrypted,
+incremental snapshots. It backs up both `/myraid1/nas/Photos` and a fresh
+logical PostgreSQL dump. It is **not active until** the private WebDAV
+credentials and Restic encryption password are configured on the host.
+
+Setup, restore-test and cloud-folder import instructions are in
+[`IMMICH-MAILRU-BACKUP.md`](IMMICH-MAILRU-BACKUP.md). The source folders already
+in Mail.ru are never included as Restic destinations or modified by backup.
+They may be downloaded for a **one-time** Immich import once their exact
+cloud paths and target user accounts are known.
+
+Keep an off-host encrypted copy and periodically test restoring both database
+and photos. A ZFS mirror or snapshots on the same pool do not protect against
+every hardware, administrative or ransomware failure.
 
 Official documentation:
 

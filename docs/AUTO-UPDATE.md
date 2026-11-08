@@ -102,7 +102,10 @@ Immich updates can change the PostgreSQL schema, including patch updates.
 A successful system build, automatic Git revert, or NixOS rollback does **not**
 roll back an application database migration. Before opting in, configure,
 verify and periodically restore-test an independent backup of both the Immich
-database and `/myraid1/nas/Photos`.
+database and `/myraid1/nas/Photos`. The optional Mail.ru Cloud backup service
+and its first-run requirements are documented in
+[`IMMICH-MAILRU-BACKUP.md`](IMMICH-MAILRU-BACKUP.md); deploying the module
+alone does not mean a working backup exists.
 
 To opt in **only after verified backups exist**, go to GitHub repository
 **Settings → Secrets and variables → Actions → Variables → New repository

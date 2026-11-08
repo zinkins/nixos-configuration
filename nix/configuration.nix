@@ -13,6 +13,7 @@
       ./media.nix
       ./immich.nix
       ./immich-public-proxy.nix
+      ./immich-mailru-backup.nix
       ./adguard.nix
       ./reverse-proxy.nix
       ./homepage.nix
