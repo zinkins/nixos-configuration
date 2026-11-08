@@ -52,7 +52,7 @@ in
       "photos.zinkin.me".extraConfig = ''
         # Public HTTPS only to the read-only share proxy. Never forward this
         # hostname to Immich's full API on port 2283.
-        reverse_proxy 127.0.0.1:3000
+        reverse_proxy 127.0.0.1:3125
       '';
 
       "http://adguard.${localDomain}".extraConfig = ''

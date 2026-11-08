@@ -72,7 +72,7 @@ clients that can reach the private home network**.
 
 The public endpoint is **https://photos.zinkin.me**, served by Caddy with
 automatic HTTPS and routed to the native, hardened `immich-public-proxy`
-service on local port 3000. The proxy needs no Immich API key and serves only
+service on local port 3125. The proxy needs no Immich API key and serves only
 shares explicitly published from Immich. Its optional visitor-upload service
 is **not** enabled. The authenticated Immich UI stays at `http://photos.home`
 and is not routed to the public hostname.
@@ -89,7 +89,7 @@ and is not routed to the public hostname.
    router WAN IPv4 actually matches your public home IPv4 and that the ISP permits
    inbound 443. Do **not** forward TCP 80: other Caddy hostnames under `.home`
    are plain-HTTP LAN services and could otherwise be reached using spoofed
-   Host headers. Do not forward 2283 or 3000.
+   Host headers. Do not forward 2283 or 3125.
 3. Caddy can use ACME **TLS-ALPN-01 on TCP 443** to obtain and renew a trusted
    certificate; external port 80 is not required for this challenge.
    Check its journal if certificate issuance fails.
@@ -107,7 +107,7 @@ and is not routed to the public hostname.
 ```bash
 systemctl status immich-server immich-public-proxy caddy --no-pager
 journalctl -u immich-public-proxy -u caddy -b -n 100 --no-pager
-curl -fsS http://127.0.0.1:3000/share/healthcheck
+curl -fsS http://127.0.0.1:3125/share/healthcheck
 dig +short A photos.zinkin.me
 curl -fsS https://photos.zinkin.me/share/healthcheck
 ```

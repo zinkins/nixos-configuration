@@ -115,7 +115,7 @@ Caddy listens on TCP 80 for LAN-only .home websites and TCP 443 for public HTTPS
 9696         Prowlarr Web UI        not directly opened to LAN
 8080         qBittorrent Web UI     not directly opened to LAN
 2283         Immich photo API      loopback only (Caddy: photos.home)
-3000         Immich Public Proxy   local service behind Caddy; no direct LAN/WAN port
+3125         Immich Public Proxy   local service behind Caddy; no direct LAN/WAN port
 8084         School diary cache     loopback only
 ```
 

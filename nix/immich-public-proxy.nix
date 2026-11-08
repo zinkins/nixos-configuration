@@ -13,7 +13,8 @@ in
     enable = true;
     package = inputs.immich-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.immich-public-proxy;
     immichUrl = "http://127.0.0.1:2283";
-    port = 3000;
+    # AdGuard Home already occupies localhost:3000.
+    port = 3125;
     openFirewall = false;
   };
 
