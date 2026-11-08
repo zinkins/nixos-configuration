@@ -80,13 +80,13 @@ and is not routed to the public hostname.
 ### Required external DNS and router setup (one time)
 
 1. At the DNS provider for `zinkin.me`, add an **A** record:
-   `photos.zinkin.me → 5.130.227.217` (e.g., host `photos`, TTL 300).
+   `photos.zinkin.me → <HOME_PUBLIC_IPV4>` (e.g., host `photos`, TTL 300).
    Keep the existing A record for `zinkin.me` pointing to its VPS
-   (`45.139.76.234`) unchanged. Ensure there is no conflicting AAAA/CNAME
+   unchanged. Ensure there is no conflicting AAAA/CNAME
    for the new hostname.
 2. On the **home router** forward **TCP 443 only** from the public WAN address
    to **TCP 443** of the NixOS server's reserved LAN IPv4 address. Verify the
-   router WAN IPv4 actually matches `5.130.227.217` and that the ISP permits
+   router WAN IPv4 actually matches your public home IPv4 and that the ISP permits
    inbound 443. Do **not** forward TCP 80: other Caddy hostnames under `.home`
    are plain-HTTP LAN services and could otherwise be reached using spoofed
    Host headers. Do not forward 2283 or 3000.
@@ -122,7 +122,7 @@ If the public IP changes, update the DNS record (or add DDNS). LAN access to
 the public domain may require router NAT loopback or split DNS; test from
 cellular data first.
 
-The existing WireGuard tunnel to the VPS at `45.139.76.234` is an alternative:
+The existing WireGuard tunnel to the VPS is an alternative:
 a separate HTTPS reverse proxy on the VPS could reach this host over the
 tunnel without any home-router port forwarding. That design would require
 changes on the VPS and is **not** part of this deployment.
