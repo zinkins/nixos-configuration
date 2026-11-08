@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ inputs, pkgs, ... }:
 
 let
   zfsMount = "/myraid1";
@@ -10,6 +10,9 @@ in
   # Only Caddy can reach the backend; no direct LAN/WAN port is opened.
   services.immich = {
     enable = true;
+    # Stable NixOS 26.05 packages Immich 2.7.5, which is marked insecure.
+    # Use a separately locked nixpkgs 3.x package, never permitInsecurePackages.
+    package = inputs.immich-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.immich;
     host = "127.0.0.1";
     port = 2283;
     openFirewall = false;

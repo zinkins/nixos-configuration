@@ -5,6 +5,16 @@ Caddy proxies it to `127.0.0.1:2283`; the application port is not exposed
 directly to the LAN or Internet. Local DNS is provided by AdGuard/dnsmasq.
 The same URL is linked from the Homepage dashboard at `http://family.home`.
 
+## Version management
+
+The stable NixOS 26.05 package is Immich 2.7.5, flagged insecure because
+upstream 2.x is unsupported and has known CVEs. **Do not bypass the insecure
+package check.** This service uses Immich 3.3.6 from a separately pinned
+`immich-nixpkgs` flake input (the initial lock revision is already known and
+hash-verified). Unlike the Codex source, this input is not updated by the
+daily Codex/Herdr workflow. Upgrade Immich deliberately, after reviewing
+release notes, making a database/media backup and passing CI.
+
 ## Storage and dependencies
 
 - Original photos, videos and generated media: `/myraid1/immich` (ZFS).

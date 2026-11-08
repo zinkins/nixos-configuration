@@ -5,6 +5,9 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     # Update Codex independently of the stable host package set.
     codex-nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Pin Immich independently. Daily Codex/Herdr updates must never trigger
+    # unreviewed photo-service/database upgrades.
+    immich-nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     # Official hash-verified release binary, without a Rust/Zig source build.
     herdr-nix = {
       url = "github:herdrdev/herdr-nix";
