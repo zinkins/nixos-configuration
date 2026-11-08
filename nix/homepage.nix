@@ -366,6 +366,14 @@ in
               siteMonitor = "http://127.0.0.1:8096";
             };
           }
+          {
+            Immich = {
+              icon = "immich.png";
+              href = "http://photos.home";
+              description = "Семейные фотографии и общие альбомы";
+              siteMonitor = "http://127.0.0.1:2283";
+            };
+          }
         ];
       }
       {
@@ -521,6 +529,15 @@ in
                 icon = "jellyfin.png";
                 href = "http://jellyfin.home";
                 description = "Медиатека";
+              }
+            ];
+          }
+          {
+            Immich = [
+              {
+                icon = "immich.png";
+                href = "http://photos.home";
+                description = "Фото семьи";
               }
             ];
           }

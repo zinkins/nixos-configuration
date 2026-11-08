@@ -44,6 +44,12 @@ in
         reverse_proxy 127.0.0.1:8096
       '';
 
+      "http://photos.${localDomain}".extraConfig = ''
+        # Keep the photo server and its API off the direct LAN firewall.
+        # Caddy handles streaming uploads and websocket upgrades.
+        reverse_proxy 127.0.0.1:2283
+      '';
+
       "http://adguard.${localDomain}".extraConfig = ''
         reverse_proxy 127.0.0.1:3000
       '';

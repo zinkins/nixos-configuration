@@ -6,6 +6,7 @@ The server provides friendly LAN URLs through Caddy:
 - `http://prowlarr.home`
 - `http://qbittorrent.home`
 - `http://jellyfin.home`
+- `http://photos.home` — Immich, семейные фотографии и общие альбомы
 - `http://adguard.home`
 
 `nixos.home` is also published in local DNS as the server name.
@@ -54,6 +55,7 @@ From a LAN client:
 nslookup prowlarr.home
 nslookup qbittorrent.home
 nslookup jellyfin.home
+nslookup photos.home
 nslookup adguard.home
 ```
 
@@ -85,6 +87,7 @@ Test the virtual hosts locally:
 curl -I -H 'Host: prowlarr.home' http://127.0.0.1/
 curl -I -H 'Host: qbittorrent.home' http://127.0.0.1/
 curl -I -H 'Host: jellyfin.home' http://127.0.0.1/
+curl -I -H 'Host: photos.home' http://127.0.0.1/
 curl -I -H 'Host: adguard.home' http://127.0.0.1/
 ```
 
@@ -104,6 +107,7 @@ Caddy listens on TCP port 80.
 8191         Byparr API             loopback only
 9696         Prowlarr Web UI        not directly opened to LAN
 8080         qBittorrent Web UI     not directly opened to LAN
+2283         Immich photo API      loopback only (Caddy: photos.home)
 8084         School diary cache     loopback only
 ```
 
@@ -119,7 +123,7 @@ Our upstream ISP blocks direct connections to `api.open-meteo.com`'s IP (`157.90
 
 Prowlarr can send selected indexer requests through the localhost SOCKS5 service `127.0.0.1:1080`, which exits through AmneziaWG. Cloudflare-protected indexers can additionally use Byparr at `127.0.0.1:8191`; Byparr's browser is itself forced through the same SOCKS5 endpoint.
 
-See `MEDIA-SETUP.md` and `BYPARR.md`.
+See `MEDIA-SETUP.md` and `BYPARR.md`. Immich setup, storage and privacy are documented in `IMMICH.md`.
 
 ## AI CLI traffic
 
@@ -142,6 +146,7 @@ interface-name=nixos.home,<LAN_INTERFACE>/4
 interface-name=prowlarr.home,<LAN_INTERFACE>/4
 interface-name=qbittorrent.home,<LAN_INTERFACE>/4
 interface-name=jellyfin.home,<LAN_INTERFACE>/4
+interface-name=photos.home,<LAN_INTERFACE>/4
 interface-name=adguard.home,<LAN_INTERFACE>/4
 ```
 

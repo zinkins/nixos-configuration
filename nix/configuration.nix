@@ -11,6 +11,7 @@
       ./packages.nix
       ./networking.nix
       ./media.nix
+      ./immich.nix
       ./adguard.nix
       ./reverse-proxy.nix
       ./homepage.nix

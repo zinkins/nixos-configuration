@@ -67,6 +67,7 @@ interface-name=family.${localDomain},$lan_if/4
 interface-name=prowlarr.${localDomain},$lan_if/4
 interface-name=qbittorrent.${localDomain},$lan_if/4
 interface-name=jellyfin.${localDomain},$lan_if/4
+interface-name=photos.${localDomain},$lan_if/4
 interface-name=adguard.${localDomain},$lan_if/4
 EOF
     '';
