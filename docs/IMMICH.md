@@ -57,16 +57,43 @@ Use Immich's web interface, mobile apps or supported import tools.
    upload. Background sync is best-effort and depends on Android/iOS battery
    and scheduling policies. Test uploads before deleting anything from phones.
 
-To maintain one shared family collection without revealing all personal
-photos, create an album such as **Family** and share it with the family users
-as **Editors** so everyone can add photos. Use **Viewers** for read-only access.
-Personal libraries remain separate by default. For two trusted adults who
-want to see each other's complete libraries, optionally enable **Partner
-Sharing** (access is one-way until both partners enable it).
+### Two phones, separate libraries and one curated family album
 
-Immich also supports public album links, optional passwords, expiry dates,
-and guest uploads. However, a link containing `photos.home` works **only for
-clients that can reach the private home network**.
+The intended setup is **two independent Immich accounts** (one per adult),
+with **each phone backing up its Camera album into its owner's private library**.
+Neither user needs a separate Mail.ru Cloud account. The host's encrypted
+Mail.ru backup covers assets uploaded by **both users**, plus database records.
+
+1. Create both accounts in **Administration → Users** and use individual
+   credentials in the Android/iOS app. Do not share the administrator login.
+2. On each phone enable **Backup**, select the desired on-device photo/video
+   albums, and verify that automatic uploads reach the correct personal
+   timeline. Mobile backup is best-effort in the background.
+3. One adult creates an album such as **Family** and shares it with the other
+   adult using the **Editor** permission. Both can then add **selected**
+   photos from their separate personal libraries into the same shared album.
+   **Viewer** grants read-only access and is insufficient for adding photos.
+4. Only after reviewing the shared album create a **public share link**
+   for relatives, with suitable password and expiration options. Publish
+   the link via the public HTTPS proxy. Do **not** make all personal uploads
+   available to relatives automatically.
+
+**Partner Sharing is NOT needed** for this workflow: it can reveal an
+entire personal timeline and location metadata, rather than just curated
+family photos. Avoid enabling it unless both account owners explicitly
+intend that broader access.
+
+**The public proxy is viewing-only for relatives**, not a remote login
+endpoint for the phones. The phones can upload on the home LAN via
+`http://photos.home`. To upload while outside the LAN, the full Immich
+API must first be reachable through a working private VPN or a separately
+hardened authenticated HTTPS endpoint. The public `photos.zinkin.me`
+domain is deliberately not such an endpoint. Test VPN DNS/reachability
+before assuming mobile backups work away from home.
+
+Immich also supports public album links, optional passwords and expiry
+dates. Links to `photos.home` are reachable only inside the LAN/VPN;
+public album links should use `https://photos.zinkin.me`.
 
 ## Sharing albums outside the home network
 

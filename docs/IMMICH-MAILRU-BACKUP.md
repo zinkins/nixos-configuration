@@ -103,60 +103,48 @@ The remote encrypted repository is **not** intended as a browsable photo
 gallery. Your existing Mail.ru folders remain browsable; Restic snapshots
 are for disaster recovery.
 
-## 4. Import the existing cloud photo workflow without changing it
+## 4. One-time import of the existing Mail.ru photo archive
 
-The cloud already has **two roles**: an incoming phone-upload folder, and a
-manually curated family folder. Photos are periodically **moved** from the
-incoming folder to the family folder by the cloud account owner. Their exact
-cloud paths are not stored in this public repository; confirm them using
-`sudo rclone --config /etc/immich-mailru/rclone.conf lsd mailru:` and the
-subfolder listing before import. The Immich target users and API keys must
-also be created first.
+**Long-term workflow chosen:** use **two personal Immich accounts**, one per
+adult, with mobile auto-backup directly into each account. Both can add
+selected items to a shared family album as **Editors**. One existing Mail.ru
+account is used for **encrypted backup of the entire Immich server**,
+including both users; there is no need for a second cloud account, and no
+recurring cloud-to-Immich importer is desired.
 
-**Recommended initial import order:**
+The Mail.ru folders are now treated as **historical sources for optional
+one-time import**, not the active source of new family photos. The exact
+remote folder paths and target account identifiers are not committed to Git:
+inspect them with `rclone lsd` after the WebDAV credentials have been
+configured.
 
-1. Import the **curated family folder first**, from a read-only rclone copy
-   in a temporary staging directory outside `/myraid1/nas/Photos`. Use a
-   specific Immich account to own the files, and `immich upload --recursive
-   --album-name "<family-album>"` to place them in the family album. Inspect
-   the album contents **before** creating a public share link.
-2. Decide whether the remaining incoming-upload folder contains any photos
-   that are **not already available from phone backup**. If needed, import
-   those into the **private** library of the phone owner, not into the
-   public family album. Use `immich upload --recursive --dry-run` first.
-3. Keep the original cloud folders unchanged and confirm photo counts,
-   metadata and access permissions. Any old NAS photo archive remains out
-   of scope.
-4. Use the Immich mobile app for **ongoing private phone backup**, and use
-   Immich's shared albums to select photos for relatives. The normal
-   `photos.zinkin.me` domain offers only links that have been explicitly
-   published; it must never expose the entire incoming phone folder.
+Recommended initial import:
 
-Use **`rclone copy`**, not `sync`, `move`, or direct writes into the
-cloud folders. `rclone copy` downloads files without deleting or moving
-the source. Keep the temporary import folder private; do not store it
-inside the Immich-managed `/myraid1/nas/Photos` directory.
+1. After creating the intended personal accounts and shared family album,
+   download a **copy** of the historically curated family cloud folder
+   into a private staging directory **outside** the Immich-managed folder.
+   Use the Immich CLI and a target user's API key to import the selected
+   files, optionally assigning them to the shared album.
+2. Consider a **separate** private-only import of any historical phone
+   uploads not already on the phone. Import with the same user's API key;
+   first test Immich's per-account deduplication and avoid reimporting the
+   same file under a second account.
+3. Verify photo counts, dates, videos and album membership before removing
+   any temporary staging copies. **Do not delete or modify the existing
+   Mail.ru cloud folders.** Leave the separate old NAS archive alone.
 
-**Important limitations:**
+Use `rclone copy` for non-destructive download, never `rclone sync`,
+`rclone move` or cloud deletion. Never copy raw images directly into
+`/myraid1/nas/Photos`, which Immich owns and manages.
 
-- Moving a file from the incoming folder to the curated folder **in Mail.ru**
-  does **not** automatically move it between Immich albums. A one-time
-  import does not provide ongoing cloud-to-Immich synchronization.
-- Immich deduplicates uploads **per account**, not between different user
-  accounts. Importing the same photo into separate phone and family
-  accounts can create two copies. Prefer a single owner for overlapping
-  photos and share selected assets via an album instead.
-- Avoid using an Immich External Library backed by a live folder that
-  frequently has files moved out of it. A rescan after a move can remove
-  old library entries (and their Immich-only album metadata).
-- Do not set up an unattended recurring importer until the intended
-  publication policy (manual curation vs auto-publication) is confirmed,
-  and every source folder has been checked for personal material.
+Continuing to move items between the old Mail.ru folders **does not update**
+Immich shared albums. In the new workflow, curated photos are shared
+**inside Immich**, directly from each owner's personal timeline, and
+the server's daily encrypted Restic backup captures them offsite.
 
-This PR intentionally implements **cloud disaster-recovery backup**, not
-cloud-to-Immich auto-import. No data import has been run on the actual
-Mail.ru account. An optional one-way incremental importer can be added
-later without granting destructive access to the original cloud folders.
+**No import has been performed in this PR.** Credentials, per-user API keys,
+private folder contents and upload actions are handled later after Immich
+and WebDAV are configured, using explicit user review.
 
 Official references:
 - https://help.mail.ru/cloud/desktop/webdav/
