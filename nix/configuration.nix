@@ -12,6 +12,7 @@
       ./networking.nix
       ./media.nix
       ./immich.nix
+      ./immich-public-proxy.nix
       ./adguard.nix
       ./reverse-proxy.nix
       ./homepage.nix

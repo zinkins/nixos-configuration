@@ -6,14 +6,20 @@ The server provides friendly LAN URLs through Caddy:
 - `http://prowlarr.home`
 - `http://qbittorrent.home`
 - `http://jellyfin.home`
-- `http://photos.home` — Immich, семейные фотографии и общие альбомы
+- `http://photos.home` — private Immich UI for uploads and accounts (LAN/VPN)
+- `https://photos.zinkin.me` — public HTTPS photo-sharing links through Immich Public Proxy only
 - `http://adguard.home`
 
 `nixos.home` is also published in local DNS as the server name.
 
 The electronic diary tile on `family.home` shows a locally saved timetable and homework. Clicking it opens `https://school.nso.ru/journal-app/`. See `SCHOOL-DIARY.md` for one-click updates from Yandex Browser and the data stored on the server.
 
-Use the explicit `http://` scheme. This LAN setup intentionally does not enable HTTPS, avoiding local CA/certificate installation and compatibility problems with older devices.
+Use explicit `http://` for the local `.home` sites. They intentionally remain
+HTTP-only for older LAN devices. The **separate** public `photos.zinkin.me`
+vhost uses HTTPS on port 443 with Caddy-managed ACME certificates. Its only
+backend is Immich Public Proxy on localhost:3000, **not** the full Immich API.
+No external access to `.home` domains or other dashboards is intended.
+See `IMMICH.md` for DNS, router NAT, and operational requirements.
 
 ## DNS architecture
 
@@ -91,13 +97,14 @@ curl -I -H 'Host: photos.home' http://127.0.0.1/
 curl -I -H 'Host: adguard.home' http://127.0.0.1/
 ```
 
-Caddy listens on TCP port 80.
+Caddy listens on TCP 80 for LAN-only .home websites and TCP 443 for public HTTPS photo sharing. Only TCP 443 should be forwarded from the WAN by the router.
 
 ## Firewall / exposure
 
 ```text
 53 TCP/UDP   AdGuard Home DNS       LAN-facing
-80 TCP       Caddy                  LAN-facing
+80 TCP       Caddy                  LAN-facing; do NOT forward from WAN
+443 TCP      Caddy public HTTPS     WAN port-forward only for photos.zinkin.me
 49160 TCP/UDP qBittorrent peers    Internet/LAN as required for torrenting
 139,445 TCP  Samba SMB              open; Samba accepts only 192.168.0.0/16
 137,138 UDP  Samba NetBIOS names    LAN-facing
@@ -108,6 +115,7 @@ Caddy listens on TCP port 80.
 9696         Prowlarr Web UI        not directly opened to LAN
 8080         qBittorrent Web UI     not directly opened to LAN
 2283         Immich photo API      loopback only (Caddy: photos.home)
+3000         Immich Public Proxy   local service behind Caddy; no direct LAN/WAN port
 8084         School diary cache     loopback only
 ```
 

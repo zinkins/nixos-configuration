@@ -62,6 +62,7 @@ Preserve these unless the task explicitly changes the architecture:
 - [`nix/school-diary.nix`](nix/school-diary.nix)
 - [`nix/media.nix`](nix/media.nix)
 - [`nix/immich.nix`](nix/immich.nix)
+- [`nix/immich-public-proxy.nix`](nix/immich-public-proxy.nix)
 - [`nix/amnezia.nix`](nix/amnezia.nix)
 - [`nix/ai-vpn.nix`](nix/ai-vpn.nix)
 - [`nix/byparr.nix`](nix/byparr.nix)

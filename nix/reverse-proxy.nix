@@ -4,12 +4,12 @@ let
   localDomain = "home";
 in
 {
-  # Friendly local names. Explicit http:// site addresses keep this LAN-only
-  # setup certificate-free, which is useful for older clients and TVs.
+  # Explicit http:// local .home sites stay unchanged for older devices.
+  # The single public photos.zinkin.me vhost gets automatic ACME HTTPS.
   services.caddy = {
     enable = true;
     httpPort = 80;
-    httpsPort = null;
+    httpsPort = 443;
 
     virtualHosts = {
       "http://family.${localDomain}".extraConfig = ''
@@ -45,9 +45,14 @@ in
       '';
 
       "http://photos.${localDomain}".extraConfig = ''
-        # Keep the photo server and its API off the direct LAN firewall.
-        # Caddy handles streaming uploads and websocket upgrades.
+        # Private, authenticated Immich UI, LAN/VPN only.
         reverse_proxy 127.0.0.1:2283
+      '';
+
+      "photos.zinkin.me".extraConfig = ''
+        # Public HTTPS only to the read-only share proxy. Never forward this
+        # hostname to Immich's full API on port 2283.
+        reverse_proxy 127.0.0.1:3000
       '';
 
       "http://adguard.${localDomain}".extraConfig = ''
@@ -56,6 +61,9 @@ in
     };
   };
 
-  # Caddy is the only browser-facing entry point for the proxied Web UIs.
-  networking.firewall.allowedTCPPorts = [ 80 ];
+  # Caddy is the only browser-facing entry point. On the home router, forward
+  # *only TCP 443* from the Internet to this NixOS host. TCP 80 stays LAN-only:
+  # forwarding 80 would also expose http://*.home virtual hosts via Host headers.
+  # TLS-ALPN-01 on TCP 443 allows public certificate issuance without WAN:80.
+  networking.firewall.allowedTCPPorts = [ 80 443 ];
 }

@@ -4,6 +4,10 @@ Immich runs natively as a NixOS service (no Docker) at **http://photos.home**.
 Caddy proxies it to `127.0.0.1:2283`; the application port is not exposed
 directly to the LAN or Internet. Local DNS is provided by AdGuard/dnsmasq.
 The same URL is linked from the Homepage dashboard at `http://family.home`.
+A separate public domain `https://photos.zinkin.me` is exclusively for
+published album links and terminates at Immich Public Proxy, not the full
+Immich API. The public proxy uses the Immich Nixpkgs input to pick a version
+compatible with Immich 3.x.
 
 ## Version management
 
@@ -64,36 +68,84 @@ Immich also supports public album links, optional passwords, expiry dates,
 and guest uploads. However, a link containing `photos.home` works **only for
 clients that can reach the private home network**.
 
+## Sharing albums outside the home network
+
+The public endpoint is **https://photos.zinkin.me**, served by Caddy with
+automatic HTTPS and routed to the native, hardened `immich-public-proxy`
+service on local port 3000. The proxy needs no Immich API key and serves only
+shares explicitly published from Immich. Its optional visitor-upload service
+is **not** enabled. The authenticated Immich UI stays at `http://photos.home`
+and is not routed to the public hostname.
+
+### Required external DNS and router setup (one time)
+
+1. At the DNS provider for `zinkin.me`, add an **A** record:
+   `photos.zinkin.me → 5.130.227.217` (e.g., host `photos`, TTL 300).
+   Keep the existing A record for `zinkin.me` pointing to its VPS
+   (`45.139.76.234`) unchanged. Ensure there is no conflicting AAAA/CNAME
+   for the new hostname.
+2. On the **home router** forward **TCP 443 only** from the public WAN address
+   to **TCP 443** of the NixOS server's reserved LAN IPv4 address. Verify the
+   router WAN IPv4 actually matches `5.130.227.217` and that the ISP permits
+   inbound 443. Do **not** forward TCP 80: other Caddy hostnames under `.home`
+   are plain-HTTP LAN services and could otherwise be reached using spoofed
+   Host headers. Do not forward 2283 or 3000.
+3. Caddy can use ACME **TLS-ALPN-01 on TCP 443** to obtain and renew a trusted
+   certificate; external port 80 is not required for this challenge.
+   Check its journal if certificate issuance fails.
+4. In the authenticated Immich UI at `http://photos.home`, set
+   **Administration → Settings → Server → External domain**
+   to `https://photos.zinkin.me` (no trailing slash), so published album
+   links point at IPP. Keep the **phone app server URL** as `http://photos.home`
+   on the LAN/VPN; `photos.zinkin.me` is deliberately **not** a login endpoint.
+5. Create a shared album, enable link sharing with appropriate password and
+   expiration, then test from a phone on cellular data (Wi-Fi off). Never
+   expose a family-wide library link unless the recipients are trusted.
+
+### Verify after DNS propagation and port forwarding
+
+```bash
+systemctl status immich-server immich-public-proxy caddy --no-pager
+journalctl -u immich-public-proxy -u caddy -b -n 100 --no-pager
+curl -fsS http://127.0.0.1:3000/share/healthcheck
+dig +short A photos.zinkin.me
+curl -fsS https://photos.zinkin.me/share/healthcheck
+```
+
+The public healthcheck should return `ok` once DNS, routing, TLS, IPP and
+Immich all work. The localhost healthcheck should work before external setup.
+Test a real album share and verify that visiting the public root does **not**
+show the Immich login interface. A private or expired link must remain
+unavailable.
+
+If the public IP changes, update the DNS record (or add DDNS). LAN access to
+the public domain may require router NAT loopback or split DNS; test from
+cellular data first.
+
+The existing WireGuard tunnel to the VPS at `45.139.76.234` is an alternative:
+a separate HTTPS reverse proxy on the VPS could reach this host over the
+tunnel without any home-router port forwarding. That design would require
+changes on the VPS and is **not** part of this deployment.
+
 ## Access from outside the house
 
-This change deliberately does **not** make Immich public. The existing `.home`
-zone uses plain HTTP and is not a publicly resolvable domain. Credentials and
-photos must not be transmitted over plain HTTP across the public Internet;
-never port-forward TCP 2283 or expose this `.home` Caddy host publicly.
+The authenticated Immich interface remains private at `http://photos.home`.
+Public sharing via `https://photos.zinkin.me` is limited to link-based
+viewing by Immich Public Proxy, as described above; the home-router DNS and
+NAT changes still must be made separately. Never forward TCP 2283 or expose
+the `.home` site to the public Internet.
 
-Options for a future follow-up:
-
-- **Private full access:** use the existing home VPN for phones/relatives that
-  need accounts or automatic uploads. Verify DNS and reachability through
-  the VPN first. Prefer trusted HTTPS for client compatibility.
-- **Public sharing without accounts:** set up a public HTTPS hostname with a
-  trusted certificate pointing to **Immich Public Proxy**, which serves only
-  albums explicitly shared by link, not the whole Immich API. It requires a
-  domain/DDNS and working inbound HTTPS or a suitable tunnel.
-- **Public account access and off-site phone backup:** requires a trusted HTTPS
-  endpoint for the *actual Immich server* (not the restricted public-link
-  proxy), with proper authentication, updates and secure Internet ingress.
-
-These alternatives are not deployed automatically because neither a public
-domain nor its TLS/inbound-access configuration is defined in this repository.
+For full remote login, phone uploads, or administration, continue using a
+private VPN. A public full-API endpoint would require a separate security
+review, trusted HTTPS and additional hardening.
 
 ## Health checks
 
 After deployment, run **diagnostics only** on the server:
 
 ```bash
-systemctl status immich-storage immich-server immich-machine-learning caddy dnsmasq --no-pager
-journalctl -u immich-storage -u immich-server -u immich-machine-learning -b -n 100 --no-pager
+systemctl status immich-storage immich-server immich-machine-learning immich-public-proxy caddy dnsmasq --no-pager
+journalctl -u immich-storage -u immich-server -u immich-machine-learning -u immich-public-proxy -b -n 100 --no-pager
 mountpoint /myraid1
 ls -ld /myraid1/nas/Photos
 curl -I -H 'Host: photos.home' http://127.0.0.1/
