@@ -9,11 +9,13 @@ The same URL is linked from the Homepage dashboard at `http://family.home`.
 
 The stable NixOS 26.05 package is Immich 2.7.5, flagged insecure because
 upstream 2.x is unsupported and has known CVEs. **Do not bypass the insecure
-package check.** This service uses Immich 3.3.6 from a separately pinned
+package check.** This service initially uses Immich 3.3.6 from a separately pinned
 `immich-nixpkgs` flake input (the initial lock revision is already known and
-hash-verified). Unlike the Codex source, this input is not updated by the
-daily Codex/Herdr workflow. Upgrade Immich deliberately, after reviewing
-release notes, making a database/media backup and passing CI.
+hash-verified). A separate weekly GitHub workflow checks Immich releases
+without touching the host, Codex or Herdr pins. Changes are submitted as
+validated PRs; automatic patch merging is disabled by default. Read
+`docs/AUTO-UPDATE.md` before enabling it, and always maintain recoverable
+database/media backups before upgrading.
 
 ## Storage and dependencies
 

@@ -15,7 +15,7 @@ Do not duplicate subsystem documentation here: follow the linked files as the so
 - Never add or repeat personal information, credentials, tokens, private keys, private VPN configuration, account data, or sensitive diagnostic output.
 - Do not copy user-specific values from existing source files into new documentation, comments, examples, issues, or commit messages.
 - Use CI as the baseline validation contract; do not claim host/runtime validation unless it was actually performed.
-- Deployment is via PR merge, not manual host commands: the server auto-pulls and applies `master` on its own (see [`docs/AUTO-UPDATE.md`](docs/AUTO-UPDATE.md)). Never run `nixos-rebuild switch`, `git push`/merge to `master`, or other apply/deploy commands directly on the host or repo on the user's behalf. Open a PR for ordinary changes and let the user merge it; the existing `nixos-config-sync.timer` then rolls it out within ~15 minutes. The **sole exception** is the narrowly scoped, user-approved Codex/Herdr `flake.lock` updater: GitHub-native PR auto-merge is permitted only after the required `Validate` check succeeds, with no protection bypass. Diagnostic reads on the host (`systemctl status`, `journalctl`, `curl`, etc.) are fine.
+- Deployment is via PR merge, not manual host commands: the server auto-pulls and applies `master` on its own (see [`docs/AUTO-UPDATE.md`](docs/AUTO-UPDATE.md)). Never run `nixos-rebuild switch`, `git push`/merge to `master`, or other apply/deploy commands directly on the host or repo on the user's behalf. Open a PR for ordinary changes and let the user merge it; the existing `nixos-config-sync.timer` then rolls it out within ~15 minutes. The exceptions are the user-approved Codex/Herdr `flake.lock` updater and the separately approved Immich patch updater. GitHub-native PR auto-merge is permitted only after the required `Validate` check succeeds, with no protection bypass. For Immich, auto-merge is additionally limited to same-major/minor patch releases and explicitly gated by `IMMICH_AUTO_MERGE_PATCH=true`; the default is manual merge, and minor/major updates require review. Diagnostic reads on the host (`systemctl status`, `journalctl`, `curl`, etc.) are fine.
 
 ## Architectural invariants
 
@@ -74,6 +74,7 @@ Preserve these unless the task explicitly changes the architecture:
 
 - [`.github/workflows/nixos-check.yml`](.github/workflows/nixos-check.yml) — validation contract.
 - [`.github/workflows/codex-update.yml`](.github/workflows/codex-update.yml) — automatic Codex/Herdr source update PRs and protected auto-merge.
+- [`.github/workflows/immich-update.yml`](.github/workflows/immich-update.yml) — weekly Immich release PRs and opt-in patch-only auto-merge.
 - [`.github/dependabot.yml`](.github/dependabot.yml) — dependency update configuration.
 - [`flake.lock`](flake.lock) — pinned flake inputs; update intentionally, not by hand-editing.
 - [`.gitignore`](.gitignore) — repository ignore rules.
