@@ -17,13 +17,17 @@ release notes, making a database/media backup and passing CI.
 
 ## Storage and dependencies
 
-- Original photos, videos and generated media: `/myraid1/immich` (ZFS).
-  This is **outside** the Samba share at `/myraid1/nas` and is owned by
-  the `immich` system user with mode `0700`.
+- Original photos, videos and generated media: `/myraid1/nas/Photos` (ZFS).
+  This location is **inside** the Samba export at `/myraid1/nas`, but is
+  private to the `immich` system user (mode `0700`). Samba users are not
+  granted direct filesystem access; use Immich to upload or share photos.
 - PostgreSQL metadata and Redis state: managed by the official NixOS Immich
   module, under their normal host service locations (not the ZFS media path).
-- The `immich-storage` one-shot unit verifies `/myraid1` is a mount point
-  and creates the private media directory before `immich-server` starts.
+- The `immich-storage` one-shot unit verifies `/myraid1` is mounted and
+  `/myraid1/nas` exists, then prepares the private folder. An empty
+  pre-existing `Photos` directory can be adopted; a populated one belonging
+  to another user blocks startup **without ownership changes**. Existing
+  photos need a planned import through Immich, not silent adoption.
   If the ZFS pool is unavailable, Immich **must fail rather than write media
   to the root filesystem**.
 - Face recognition and semantic search are enabled by the NixOS module's
@@ -89,7 +93,7 @@ After deployment, run **diagnostics only** on the server:
 systemctl status immich-storage immich-server immich-machine-learning caddy dnsmasq --no-pager
 journalctl -u immich-storage -u immich-server -u immich-machine-learning -b -n 100 --no-pager
 mountpoint /myraid1
-ls -ld /myraid1/immich
+ls -ld /myraid1/nas/Photos
 curl -I -H 'Host: photos.home' http://127.0.0.1/
 dig @127.0.0.1 photos.home
 ```
@@ -101,7 +105,7 @@ separately after merging; CI validates the NixOS build, not the live server.
 ## Backups and recovery
 
 **Immich is not itself a backup.** Keep independent, regularly tested backups
-of both (1) `/myraid1/immich` including original assets and (2) the Immich
+of both (1) `/myraid1/nas/Photos` including original assets and (2) the Immich
 PostgreSQL database/metadata. A ZFS mirror or snapshots on the same pool do
 not protect against every hardware, administrative or ransomware failure.
 Make at least one copy to another device/location before relying on Immich as

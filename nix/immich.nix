@@ -2,7 +2,7 @@
 
 let
   zfsMount = "/myraid1";
-  photoStorage = "${zfsMount}/immich";
+  photoStorage = "${zfsMount}/nas/Photos";
 in
 {
   # Separate accounts, mobile uploads and shared albums. The NixOS Immich
@@ -19,29 +19,50 @@ in
     mediaLocation = photoStorage;
   };
 
-  # The media directory is intentionally outside /myraid1/nas (the Samba
-  # share), so private photos are not exposed through the NAS share.
+  # Store photos in the NAS tree, but keep the managed library inaccessible
+  # through Samba (immich:immich, mode 0700).
+  # Never adopt a pre-existing populated folder owned by another user:
+  # photos must instead be migrated through Immich's import tools.
   #
-  # A normal tmpfiles "d" rule can create a directory on the root filesystem
-  # before ZFS is mounted. Fail closed instead: prepare the folder as root
-  # only after verifying that the pool is actually mounted.
+  # Fail closed if ZFS is not mounted; do not create the folder on root disk.
   systemd.services.immich-storage = {
     description = "Prepare private Immich storage on ZFS";
     after = [ "zfs-mount.service" ];
-    unitConfig.RequiresMountsFor = [ zfsMount ];
+    unitConfig.RequiresMountsFor = [ zfsMount "${zfsMount}/nas" ];
     serviceConfig.Type = "oneshot";
     script = ''
       if ! ${pkgs.util-linux}/bin/mountpoint -q ${zfsMount}; then
         echo "Immich storage unavailable: ${zfsMount} is not mounted" >&2
         exit 1
       fi
-      ${pkgs.coreutils}/bin/install -d -m 0700 -o immich -g immich ${photoStorage}
+      if [ ! -d "${zfsMount}/nas" ]; then
+        echo "Immich storage unavailable: NAS directory is missing" >&2
+        exit 1
+      fi
+      if [ -L "${photoStorage}" ]; then
+        echo "Immich storage cannot be a symbolic link" >&2
+        exit 1
+      fi
+      if [ -e "${photoStorage}" ]; then
+        if [ ! -d "${photoStorage}" ]; then
+          echo "Immich storage exists but is not a directory" >&2
+          exit 1
+        fi
+        # Adopt an empty directory, but never silently take ownership
+        # of an existing populated collection.
+        if [ -n "$(${pkgs.findutils}/bin/find "${photoStorage}" -mindepth 1 -maxdepth 1 -print -quit)" ] \
+          && [ "$(${pkgs.coreutils}/bin/stat -c '%U:%G' "${photoStorage}")" != "immich:immich" ]; then
+          echo "Immich storage contains files not owned by Immich; import them manually" >&2
+          exit 1
+        fi
+      fi
+      ${pkgs.coreutils}/bin/install -d -m 0700 -o immich -g immich "${photoStorage}"
     '';
   };
 
   systemd.services.immich-server = {
     requires = [ "immich-storage.service" ];
     after = [ "immich-storage.service" ];
-    unitConfig.RequiresMountsFor = [ zfsMount ];
+    unitConfig.RequiresMountsFor = [ zfsMount "${zfsMount}/nas" ];
   };
 }
