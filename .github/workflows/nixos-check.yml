@@ -17,7 +17,8 @@ jobs:
   validate:
     name: Validate
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # Fresh Codex Rust builds can exceed the previous 45-minute job limit.
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository
