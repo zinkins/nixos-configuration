@@ -2,14 +2,16 @@
 
 let
   upstreamCodex = inputs.codex-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.codex;
-  # Codex 0.167.0 needs bundled AWS-LC rather than treating OpenSSL as AWS-LC.
-  # Leave older derivations unchanged so their binary cache remains usable.
+  # Codex >= 0.167.0 needs bundled AWS-LC, not the system OpenSSL.
+  # The nixpkgs cargo-setup-hook forces AWS_LC_SYS_USE_SYSTEM=1 in preConfigure,
+  # overriding any derivation env attribute. Reset it later, in preBuild.
+  # Leave older versions unmodified so Nix can reuse binary cache results.
   codex =
     if lib.versionAtLeast upstreamCodex.version "0.167.0" then
       upstreamCodex.overrideAttrs (old: {
-        env = (old.env or {}) // {
-          AWS_LC_SYS_USE_SYSTEM = "0";
-        };
+        preBuild = (old.preBuild or "") + ''
+          export AWS_LC_SYS_USE_SYSTEM=0
+        '';
       })
     else
       upstreamCodex;
