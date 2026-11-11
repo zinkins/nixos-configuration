@@ -1,7 +1,18 @@
 { inputs, lib, pkgs, ... }:
 
 let
-  codex = inputs.codex-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.codex;
+  upstreamCodex = inputs.codex-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.codex;
+  # Codex 0.167.0 needs bundled AWS-LC rather than treating OpenSSL as AWS-LC.
+  # Leave older derivations unchanged so their binary cache remains usable.
+  codex =
+    if lib.versionAtLeast upstreamCodex.version "0.167.0" then
+      upstreamCodex.overrideAttrs (old: {
+        env = (old.env or {}) // {
+          AWS_LC_SYS_USE_SYSTEM = "0";
+        };
+      })
+    else
+      upstreamCodex;
   namespaceName = "ai-vpn";
   hostInterface = "ai-vpn-host";
   namespaceInterface = "ai-vpn-ns";
