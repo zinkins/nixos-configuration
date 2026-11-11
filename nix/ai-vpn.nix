@@ -1,7 +1,15 @@
 { inputs, lib, pkgs, ... }:
 
 let
-  codex = inputs.codex-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.codex;
+  # aws-lc-sys 0.45.0 cannot use OpenSSL as a system AWS-LC installation.
+  # Build its bundled AWS-LC instead (Codex 0.167.0 and later).
+  codex =
+    (inputs.codex-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.codex)
+    .overrideAttrs (old: {
+      env = (old.env or {}) // {
+        AWS_LC_SYS_USE_SYSTEM = "0";
+      };
+    });
   namespaceName = "ai-vpn";
   hostInterface = "ai-vpn-host";
   namespaceInterface = "ai-vpn-ns";
