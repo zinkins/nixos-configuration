@@ -15,6 +15,7 @@
       ./immich-public-proxy.nix
       ./immich-remote.nix
       ./immich-mailru-backup.nix
+      ./immich-setup.nix
       ./adguard.nix
       ./reverse-proxy.nix
       ./homepage.nix

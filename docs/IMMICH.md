@@ -47,6 +47,31 @@ Use Immich's web interface, mobile apps or supported import tools.
 
 ## First login and family accounts
 
+### Interactive setup (recommended)
+
+After deployment, run `sudo immich-setup` in the host terminal. It creates
+or reuses the local administrator and two separate ordinary users, creates
+or reuses the named shared album and grants the second user Editor access,
+sets the public-share domain and disables public registration. The wizard
+asks for passwords without echoing them, and never publishes the album.
+It optionally runs the rclone configuration wizard, creates a Restic key
+only if absent and queues the first backup after confirmation. Save the
+key offline before starting the backup. After checking HTTPS and Fail2ban,
+it can explicitly enable remote access. It cannot configure your phones
+or router or verify Internet reachability from a separate network.
+
+Run `sudo immich-doctor` for a read-only service/backup status report.
+A timer collects it every five minutes for the local Homepage Immich card;
+it does not query the cloud on each browser refresh. Statistics use a
+root-only API key with just `server.statistics` permission, never exposed
+to Homepage; the report contains only aggregates and status. HTTPS checks
+are from the server's LAN, not proof of WAN reachability. The last successful
+backup time is recorded only after a successful backup/prune run; this is
+not proof of restorability. A stale report or backup is marked accordingly.
+The wizard does not yet mount or import archives, nor automatically
+restore-test cloud backups. For manual setup use the steps below.
+
+
 1. Once this PR is merged and the normal automatic deployment has completed,
    browse to `http://photos.home` from a client using the home DNS.
 2. Complete the initial setup and create the **first administrator** account.

@@ -66,6 +66,8 @@ Preserve these unless the task explicitly changes the architecture:
 - [`nix/immich-public-proxy.nix`](nix/immich-public-proxy.nix)
 - [`nix/immich-remote.nix`](nix/immich-remote.nix)
 - [`nix/immich-mailru-backup.nix`](nix/immich-mailru-backup.nix)
+- [`nix/immich-setup.nix`](nix/immich-setup.nix)
+- [`nix/scripts/immich-operator.py`](nix/scripts/immich-operator.py)
 - [`nix/amnezia.nix`](nix/amnezia.nix)
 - [`nix/ai-vpn.nix`](nix/ai-vpn.nix)
 - [`nix/byparr.nix`](nix/byparr.nix)

@@ -139,6 +139,21 @@ are for disaster recovery.
 
 ## 4. One-time import of the existing Mail.ru photo archive
 
+An alternative to copying the historical archive into managed storage is
+an External Library. A read-only rclone WebDAV mount can present cloud files
+as a local path, with bounded VFS caching, but it is not configured by the
+backup remote alone. A cloud outage or removed/moved source files may make
+external assets unavailable and a rescan can lose album/metadata associations.
+Do not automatically scan an unreliable remote mount. Test on a small
+separate folder first. For durable local access prefer a read-only local
+mirror on ZFS outside managed storage, with a verified independent cloud
+copy. The direct mount and initial import are **not implemented** by the
+setup wizard; they need an explicit mode selection, mount/permission tests,
+and a recovery plan. Do not treat cloud-only originals as independently
+backed up. See https://rclone.org/commands/rclone_mount/ and
+https://docs.immich.app/features/libraries/.
+
+
 **Long-term workflow chosen:** use **two personal Immich accounts**, one per
 adult, with mobile auto-backup directly into each account via the authenticated
 HTTPS address `https://immich.zinkin.me` once explicitly enabled. Both can add

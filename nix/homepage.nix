@@ -181,6 +181,15 @@ let
                     self.send_response(502)
                 else:
                     self.send_response(200)
+            elif self.path == "/immich":
+                try:
+                    with open("/run/immich-health/status.json", encoding="utf-8") as file:
+                        payload = json.load(file)
+                    if time.time() - payload["checkedAt"] > 900:
+                        payload = {"immich": "Диагностика устарела", "backup": "Неизвестно", "remote": "Неизвестно"}
+                except (OSError, ValueError, KeyError, TypeError):
+                    payload = {"immich": "Ожидает диагностики", "backup": "Неизвестно", "remote": "Неизвестно"}
+                self.send_response(200)
             elif self.path == "/status":
                 payload = {}
                 payload.update(vpn_status())
@@ -372,6 +381,21 @@ in
               href = "http://photos.home";
               description = "Семейные фотографии и общие альбомы";
               siteMonitor = "http://127.0.0.1:2283";
+              widget = {
+                type = "customapi";
+                url = "http://127.0.0.1:${toString statusPort}/immich";
+                refreshInterval = 60000;
+                mappings = [
+                  { field = "immich"; label = "Immich"; }
+                  { field = "version"; label = "Версия"; }
+                  { field = "photos"; label = "Фото"; }
+                  { field = "videos"; label = "Видео"; }
+                  { field = "usage"; label = "Медиа"; }
+                  { field = "backup"; label = "Бэкап"; }
+                  { field = "lastBackup"; label = "Последний"; }
+                  { field = "remote"; label = "HTTPS"; }
+                ];
+              };
             };
           }
         ];

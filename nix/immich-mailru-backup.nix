@@ -93,6 +93,10 @@ in
     requires = [ "immich-storage.service" "postgresql.service" ];
     after = [ "immich-storage.service" "postgresql.service" ];
     path = [ pkgs.rclone ];
+    # Only mark a completely successful backup/prune run, never a mere start.
+    serviceConfig.ExecStartPost = [
+      "${pkgs.coreutils}/bin/touch ${stagingDir}/last-success"
+    ];
   };
 
   # Allow setting up the private WebDAV remote without a one-off Nix shell.
