@@ -219,6 +219,8 @@ sudo fail2ban-client status immich-login
 sudo fail2ban-regex /var/log/caddy/immich-login.log /etc/fail2ban/filter.d/immich-login.conf
 ```
 
+The NixOS build adapts the Caddy configuration and tests the Fail2ban filter
+against synthetic success/failure logs. Runtime validation is still required.
 Run ping after enabling the marker. Verify the filter matches an unsuccessful
 login from a test account; do not deliberately trigger a ban on a production
 or shared connection. Fail2ban is supplementary protection, not a guarantee
