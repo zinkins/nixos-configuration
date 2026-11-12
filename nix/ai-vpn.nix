@@ -1,20 +1,7 @@
 { inputs, lib, pkgs, ... }:
 
 let
-  upstreamCodex = inputs.codex-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.codex;
-  # Codex >= 0.167.0 needs bundled AWS-LC, not the system OpenSSL.
-  # The nixpkgs cargo-setup-hook forces AWS_LC_SYS_USE_SYSTEM=1 in preConfigure,
-  # overriding any derivation env attribute. Reset it later, in preBuild.
-  # Leave older versions unmodified so Nix can reuse binary cache results.
-  codex =
-    if lib.versionAtLeast upstreamCodex.version "0.167.0" then
-      upstreamCodex.overrideAttrs (old: {
-        preBuild = (old.preBuild or "") + ''
-          export AWS_LC_SYS_USE_SYSTEM=0
-        '';
-      })
-    else
-      upstreamCodex;
+  codex = import ./codex-package.nix { inherit inputs pkgs; };
   namespaceName = "ai-vpn";
   hostInterface = "ai-vpn-host";
   namespaceInterface = "ai-vpn-ns";
