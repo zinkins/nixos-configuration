@@ -15,6 +15,40 @@ service has file-existence conditions and skips until both private secret
 files exist. A successful NixOS build does not verify cloud authentication,
 capacity, backups, or restorability.
 
+## Backup contents and regenerable media
+
+Restic snapshots contain all managed original photos/videos (including both
+`upload/` and `library/`), profile images, sidecars, and database backups,
+including the fresh custom-format PostgreSQL dump. The machine-learning
+model cache is outside the backup paths. The contents of `thumbs/` and
+`encoded-video/` are excluded, **except** their `.immich` storage-integrity
+markers; the parent directories and markers remain in the snapshot.
+Existing historical database dumps in `backups/` are kept intentionally:
+they are historical recovery points, not regenerable media.
+
+After restoring, preserve the restored file ownership and `.immich` markers,
+restore the matching database, then use Administration → Job Queues to run
+thumbnail generation and video transcoding for **all** assets. Do not
+bypass mount-integrity checks. See the official backup and system-integrity
+references below. Regeneration takes CPU time and generated files may be
+unavailable until jobs finish.
+
+Restic deduplicates content within its own encrypted repository, not against
+ordinary files elsewhere in the Mail.ru account. Imported cloud originals
+therefore still participate in the self-contained Restic backup. Adding a
+photo already in a user's managed library to a shared album does not create
+another original file just because of the album membership. Never exclude
+managed originals by album, filename, or supposed cloud presence: the database
+references their exact paths, and the old cloud folder can change or disappear.
+
+A separately managed **read-only external library** backed by a local copy of
+an immutable cloud archive could avoid storing the same historical originals
+in Restic. That would require a separate verified recovery procedure for the
+external files at the same paths, including version/hash verification and
+protection against cloud-side deletion. It is not enabled by this PR. Keep
+all managed originals in Restic unless that alternative is explicitly chosen
+and tested. The existing Mail.ru photo folders are not modified.
+
 ## 1. Create a Mail.ru external-application password
 
 In the Mail account security settings, create a separate **application
@@ -152,3 +186,5 @@ Official references:
 - https://rclone.org/webdav/
 - https://restic.readthedocs.io/en/stable/030_preparing_a_new_repo.html
 - https://docs.immich.app/administration/backup-and-restore/
+- https://docs.immich.app/administration/system-integrity/
+- https://restic.readthedocs.io/en/stable/040_backup.html#excluding-files

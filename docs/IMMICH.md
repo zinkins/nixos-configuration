@@ -250,8 +250,11 @@ separately after merging; CI validates the NixOS build, not the live server.
 
 **Immich is not itself a backup.** The optional Mail.ru Cloud Restic backup
 service in `nix/immich-mailru-backup.nix` is set to run daily with encrypted,
-incremental snapshots. It backs up both `/myraid1/nas/Photos` and a fresh
-logical PostgreSQL dump. It is **not active until** the private WebDAV
+incremental snapshots. It backs up the originals, profile images and other
+non-regenerable data in `/myraid1/nas/Photos` plus a fresh logical PostgreSQL
+dump. Generated thumbnails and transcoded videos are excluded, while the
+`.immich` integrity markers are preserved. After a restore, regenerate the
+thumbnails and transcoded videos. It is **not active until** the private WebDAV
 credentials and Restic encryption password are configured on the host.
 
 Setup, restore-test and cloud-folder import instructions are in

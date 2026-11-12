@@ -22,6 +22,17 @@ in
 
     paths = [ mediaPath databaseDump ];
 
+    # Generated previews and transcoded videos can be regenerated from
+    # originals. Exclude the contents, NOT the parent directories, and
+    # preserve the .immich mount integrity markers for recovery.
+    # Keep all originals, profile images, sidecars, and database dumps.
+    exclude = [
+      "${mediaPath}/thumbs/*"
+      "!${mediaPath}/thumbs/.immich"
+      "${mediaPath}/encoded-video/*"
+      "!${mediaPath}/encoded-video/.immich"
+    ];
+
     backupPrepareCommand = ''
       #!${pkgs.runtimeShell}
       set -euo pipefail
