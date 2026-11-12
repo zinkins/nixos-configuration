@@ -5,7 +5,7 @@ let
 in
 {
   # Explicit http:// local .home sites stay unchanged for older devices.
-  # The single public photos.zinkin.me vhost gets automatic ACME HTTPS.
+  # Separate public sharing and authenticated mobile HTTPS hosts use ACME.
   services.caddy = {
     enable = true;
     httpPort = 80;
@@ -45,7 +45,7 @@ in
       '';
 
       "http://photos.${localDomain}".extraConfig = ''
-        # Private, authenticated Immich UI, LAN/VPN only.
+        # Local setup and administration; phones use immich.zinkin.me.
         reverse_proxy 127.0.0.1:2283
       '';
 

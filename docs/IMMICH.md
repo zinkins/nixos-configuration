@@ -7,7 +7,9 @@ The same URL is linked from the Homepage dashboard at `http://family.home`.
 A separate public domain `https://photos.zinkin.me` is exclusively for
 published album links and terminates at Immich Public Proxy, not the full
 Immich API. The public proxy uses the Immich Nixpkgs input to pick a version
-compatible with Immich 3.x.
+compatible with Immich 3.x. The separate **https://immich.zinkin.me** endpoint
+provides authenticated access to the full Immich API and UI for family phones
+and stays disabled until explicitly enabled after local administrator setup.
 
 ## Version management
 
@@ -51,8 +53,9 @@ Use Immich's web interface, mobile apps or supported import tools.
    Do not share the administrator password with family members.
 3. In the web UI, use **Administration → Users** to create a separate ordinary
    account for every family member who will upload photos.
-4. Install the official Immich app for Android/iOS and sign in to
-   `http://photos.home` with each person's own account.
+4. Complete the remote-access setup below, then install the official Immich
+   app for Android/iOS and sign in to `https://immich.zinkin.me` with each
+   person's own ordinary account.
 5. On each phone, enable **Backup** and select the camera/device albums to
    upload. Background sync is best-effort and depends on Android/iOS battery
    and scheduling policies. Test uploads before deleting anything from phones.
@@ -83,13 +86,12 @@ entire personal timeline and location metadata, rather than just curated
 family photos. Avoid enabling it unless both account owners explicitly
 intend that broader access.
 
-**The public proxy is viewing-only for relatives**, not a remote login
-endpoint for the phones. The phones can upload on the home LAN via
-`http://photos.home`. To upload while outside the LAN, the full Immich
-API must first be reachable through a working private VPN or a separately
-hardened authenticated HTTPS endpoint. The public `photos.zinkin.me`
-domain is deliberately not such an endpoint. Test VPN DNS/reachability
-before assuming mobile backups work away from home.
+**The public proxy is viewing-only for relatives.** Use
+`https://immich.zinkin.me` in the official app on each phone, at home and
+on mobile data, after completing the remote-access setup below. No manual
+VPN connection is required. In Backup settings allow uploads over cellular
+data if desired (Wi-Fi-only is the default). Background execution remains
+subject to Android/iOS restrictions and cellular data limits.
 
 Immich also supports public album links, optional passwords and expiry
 dates. Links to `photos.home` are reachable only inside the LAN/VPN;
@@ -107,8 +109,9 @@ and is not routed to the public hostname.
 ### Required external DNS and router setup (one time)
 
 1. At the DNS provider for `zinkin.me`, add an **A** record:
-   `photos.zinkin.me → <HOME_PUBLIC_IPV4>` (e.g., host `photos`, TTL 300).
-   Keep the existing A record for `zinkin.me` pointing to its VPS
+   `photos.zinkin.me → <HOME_PUBLIC_IPV4>` and
+   `immich.zinkin.me → <HOME_PUBLIC_IPV4>` (hosts `photos` and `immich`,
+   TTL 300). Keep the existing A record for `zinkin.me` pointing to its VPS
    unchanged. Ensure there is no conflicting AAAA/CNAME
    for the new hostname.
 2. On the **home router** forward **TCP 443 only** from the public WAN address
@@ -123,8 +126,9 @@ and is not routed to the public hostname.
 4. In the authenticated Immich UI at `http://photos.home`, set
    **Administration → Settings → Server → External domain**
    to `https://photos.zinkin.me` (no trailing slash), so published album
-   links point at IPP. Keep the **phone app server URL** as `http://photos.home`
-   on the LAN/VPN; `photos.zinkin.me` is deliberately **not** a login endpoint.
+   links point at IPP. Set the **phone app server URL** to
+   `https://immich.zinkin.me` once enabled. `photos.zinkin.me` is deliberately
+   not a login endpoint.
 5. Create a shared album, enable link sharing with appropriate password and
    expiration, then test from a phone on cellular data (Wi-Fi off). Never
    expose a family-wide library link unless the recipients are trusted.
@@ -145,26 +149,83 @@ Test a real album share and verify that visiting the public root does **not**
 show the Immich login interface. A private or expired link must remain
 unavailable.
 
-If the public IP changes, update the DNS record (or add DDNS). LAN access to
-the public domain may require router NAT loopback or split DNS; test from
-cellular data first.
+If the public IP changes, update both DNS records (or add DDNS). AdGuard
+and dnsmasq resolve both HTTPS hostnames to the LAN IPv4 for clients using
+the home DNS; public DNS resolves them to the WAN IPv4. Clients using their
+own DoH or Private DNS may instead need NAT loopback. Test from cellular
+data first.
 
 The existing WireGuard tunnel to the VPS is an alternative:
 a separate HTTPS reverse proxy on the VPS could reach this host over the
 tunnel without any home-router port forwarding. That design would require
 changes on the VPS and is **not** part of this deployment.
 
-## Access from outside the house
+## Authenticated mobile uploads outside the house
 
-The authenticated Immich interface remains private at `http://photos.home`.
-Public sharing via `https://photos.zinkin.me` is limited to link-based
-viewing by Immich Public Proxy, as described above; the home-router DNS and
-NAT changes still must be made separately. Never forward TCP 2283 or expose
-the `.home` site to the public Internet.
+The remote host `https://immich.zinkin.me` proxies the complete Immich UI
+and API, including streaming uploads and WebSockets, over trusted HTTPS.
+It is **Internet-facing**, not VPN-only or IP-allowlisted. Each user
+authenticates with their own Immich account. The separate
+`https://photos.zinkin.me` still exposes only published links via IPP.
+Never expose port 2283 directly.
 
-For full remote login, phone uploads, or administration, continue using a
-private VPN. A public full-API endpoint would require a separate security
-review, trusted HTTPS and additional hardening.
+### One-time safe activation
+
+1. Create both public DNS A records and forward **only TCP 443** as above.
+2. On the LAN, open `http://photos.home` and initialize the first admin
+   yourself. Create two ordinary accounts with unique strong passwords.
+   Keep the admin account separate and do not use it on the phones.
+3. Verify the local instance is running and the HTTPS certificate is valid.
+   Until enabled, `https://immich.zinkin.me/` returns HTTP 503.
+   The initial-admin registration API is always blocked on the remote host.
+4. Explicitly enable remote access from the host terminal:
+
+   ```bash
+   sudo install -m 0644 -o root -g root /dev/null /etc/immich-remote/enabled
+   ```
+
+   This root-owned marker survives rebuilds. No Caddy reload is required.
+   Remove it to close the remote API for new requests (the LAN and public
+   share proxy remain available):
+
+   ```bash
+   sudo rm -f /etc/immich-remote/enabled
+   ```
+
+5. On both phones use `https://immich.zinkin.me`, sign in with each user's
+   account, select camera folders and enable cellular uploads in Backup
+   settings. On Android allow background data and remove restrictive battery
+   optimization; on iOS enable Background App Refresh.
+6. Disable Wi-Fi and any VPN on a phone, take a test photo and video, and
+   verify they reach the correct private library. Verify home Wi-Fi works
+   with the same HTTPS address.
+
+### Security and verification
+
+Fail2ban is configured for failed password logins: ten HTTP 401 login
+failures within ten minutes trigger a 30-minute IP ban on TCP 443.
+The filter uses the direct TCP peer IP, not a forwarded header. It assumes
+the current direct router port-forward topology, not a CDN or VPS proxy.
+Carrier NAT can affect other people sharing a banned address.
+No Basic Auth, custom headers or client certificate are imposed on the app,
+since those mechanisms can interfere with mobile uploads/playback.
+
+```bash
+dig @127.0.0.1 +short immich.zinkin.me
+dig @9.9.9.9 +short immich.zinkin.me
+curl -I https://immich.zinkin.me/
+curl -fsS https://immich.zinkin.me/api/server/ping
+sudo fail2ban-client status immich-login
+sudo fail2ban-regex /var/log/caddy/immich-login.log /etc/fail2ban/filter.d/immich-login.conf
+```
+
+Run ping after enabling the marker. Verify the filter matches an unsuccessful
+login from a test account; do not deliberately trigger a ban on a production
+or shared connection. Fail2ban is supplementary protection, not a guarantee
+against compromise. Keep Immich current, review security notices and verify
+off-host backups. Admin API authorization still depends on Immich's own role
+checks; use the LAN interface for administration. For maximum isolation use
+a VPN instead of enabling remote access.
 
 ## Health checks
 

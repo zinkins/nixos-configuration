@@ -106,7 +106,8 @@ are for disaster recovery.
 ## 4. One-time import of the existing Mail.ru photo archive
 
 **Long-term workflow chosen:** use **two personal Immich accounts**, one per
-adult, with mobile auto-backup directly into each account. Both can add
+adult, with mobile auto-backup directly into each account via the authenticated
+HTTPS address `https://immich.zinkin.me` once explicitly enabled. Both can add
 selected items to a shared family album as **Editors**. One existing Mail.ru
 account is used for **encrypted backup of the entire Immich server**,
 including both users; there is no need for a second cloud account, and no

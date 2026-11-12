@@ -64,6 +64,7 @@ Preserve these unless the task explicitly changes the architecture:
 - [`nix/media.nix`](nix/media.nix)
 - [`nix/immich.nix`](nix/immich.nix)
 - [`nix/immich-public-proxy.nix`](nix/immich-public-proxy.nix)
+- [`nix/immich-remote.nix`](nix/immich-remote.nix)
 - [`nix/immich-mailru-backup.nix`](nix/immich-mailru-backup.nix)
 - [`nix/amnezia.nix`](nix/amnezia.nix)
 - [`nix/ai-vpn.nix`](nix/ai-vpn.nix)
