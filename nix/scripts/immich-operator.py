@@ -145,7 +145,12 @@ def doctor():
         data["backup"] = fresh_status(last, now)
         if last is not None:
             data["lastBackup"] = datetime.datetime.fromtimestamp(last).strftime("%d.%m %H:%M")
-        if run(["systemctl", "is-active", "--quiet", "restic-backups-immich-mailru.service"]):
+        try:
+            active = subprocess.check_output(["systemctl", "show", "-p", "ActiveState", "--value",
+                        "restic-backups-immich-mailru.service"], text=True, timeout=5).strip()
+        except (OSError, subprocess.SubprocessError):
+            active = ""
+        if active in ("active", "activating"):
             data["backup"] = "Выполняется"
         elif run(["systemctl", "is-failed", "--quiet", "restic-backups-immich-mailru.service"]):
             data["backup"] = "Ошибка последнего запуска"
@@ -235,9 +240,10 @@ def setup():
                 "albumUsers": [{"userId": member, "role": "editor"}]}, token=owner_token)
         print("Семейный альбом готов. Публичная ссылка НЕ создана.")
         cfg = api("/system-config", token=token)
-        if cfg["server"]["externalDomain"] != SHARE or cfg["server"]["publicUsers"]:
+        # Public Users controls discoverability of fellow users, not registration.
+        # Preserve this setting so the two family accounts can share albums.
+        if cfg["server"]["externalDomain"] != SHARE:
             cfg["server"]["externalDomain"] = SHARE
-            cfg["server"]["publicUsers"] = False
             api("/system-config", "PUT", cfg, token=token)
         # One tightly scoped API key, read by root-only doctor; not Homepage.
         if not KEY.exists():
@@ -271,7 +277,7 @@ def setup():
         if not GATE.exists() and ask("Разрешить удалённый доступ после проверки HTTPS и Fail2ban?"):
             if http_status(MOBILE + "/") != 503 or not run(["fail2ban-client", "status", "immich-login"]):
                 print("HTTPS или Fail2ban не готовы; внешний доступ остаётся выключен.")
-            elif not api("/server/config")["isInitialized"] or api("/server/config")["publicUsers"]:
+            elif not api("/server/config")["isInitialized"]:
                 print("Сначала завершите безопасную настройку администратора.")
             else:
                 secret_write(GATE, "enabled")

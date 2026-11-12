@@ -52,7 +52,9 @@ Use Immich's web interface, mobile apps or supported import tools.
 After deployment, run `sudo immich-setup` in the host terminal. It creates
 or reuses the local administrator and two separate ordinary users, creates
 or reuses the named shared album and grants the second user Editor access,
-sets the public-share domain and disables public registration. The wizard
+sets the public-share domain. Initial administrator registration remains
+blocked at the public proxy; ordinary users are created by the administrator.
+The wizard
 asks for passwords without echoing them, and never publishes the album.
 It optionally runs the rclone configuration wizard, creates a Restic key
 only if absent and queues the first backup after confirmation. Save the

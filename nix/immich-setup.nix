@@ -41,7 +41,8 @@ in
   };
   system.extraDependencies = [
     (pkgs.runCommand "immich-operator-test" { nativeBuildInputs = [ pkgs.python3 ]; } ''
-      python3 -m py_compile ${./scripts/immich-operator.py}
+      cp ${./scripts/immich-operator.py} "$TMPDIR/immich-operator.py"
+      python3 -m py_compile "$TMPDIR/immich-operator.py"
       python3 ${./scripts/immich-operator.py} self-test
       touch "$out"
     '')
