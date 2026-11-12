@@ -25,6 +25,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The PR merge commit's first parent is needed for the package-change check.
+          fetch-depth: 2
 
       - name: Install Nix
         uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
@@ -38,3 +40,17 @@ jobs:
 
       - name: Build NixOS system
         run: nix build .#nixosConfigurations.nixos.config.system.build.toplevel --no-link --print-build-logs
+
+      # Validate the actual update candidate when the Codex package recipe changes,
+      # not only the older version pinned in the PR's lock file.
+      - name: Validate next Codex input when package recipe changes
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          if git diff --quiet HEAD^1 HEAD -- nix/codex-package.nix; then
+            echo "Codex package recipe unchanged; skipping candidate build."
+            exit 0
+          fi
+          nix flake update codex-nixpkgs
+          nix flake check --show-trace
+          nix build .#nixosConfigurations.nixos.config.system.build.toplevel --no-link --print-build-logs

@@ -63,6 +63,12 @@ Actions workflow) runs daily at **03:23 UTC**, or manually via
    builds the full system, dry-activates and switches it (approximately every 15
    minutes). If host preflight/activation fails, the updater rolls back.
 
+When a PR changes `nix/codex-package.nix`, the required **Validate** job also
+updates `codex-nixpkgs` in its temporary CI checkout and builds the complete
+system with that candidate. This detects package-recipe regressions even when
+the PR still pins an older Codex version; the CI check does not commit the lock
+file or deploy anything.
+
 A failed flake check, system build or required PR check **blocks deployment**.
 A failed PR remains for diagnosis. The updater does not alter network/VPN
 settings, upgrade the stable Nixpkgs input, force-push master, or bypass rulesets.
