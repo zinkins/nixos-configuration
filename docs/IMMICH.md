@@ -56,6 +56,14 @@ sets the public-share domain. Initial administrator registration remains
 blocked at the public proxy; ordinary users are created by the administrator.
 The wizard
 asks for passwords without echoing them, and never publishes the album.
+Repeated runs verify active users and album membership through a read-only
+local PostgreSQL query. A fully configured installation, including an
+unambiguous configuration made by the previous wizard, skips account
+credentials entirely. Selected UUIDs are stored root-only in
+`/var/lib/immich-operator/family-selection.json`, not passwords. Ambiguous
+existing accounts/albums require a selection; incomplete stages only ask
+for credentials needed to make the corresponding API change. Existing
+passwords and public share links are not changed.
 It optionally runs the rclone configuration wizard, creates a Restic key
 only if absent and queues the first backup after confirmation. Save the
 key offline before starting the backup. After checking HTTPS and Fail2ban,
