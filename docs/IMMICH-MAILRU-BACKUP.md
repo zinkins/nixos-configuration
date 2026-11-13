@@ -75,14 +75,35 @@ In the interactive wizard select:
 - Username: your Mail.ru login/email.
 - Password: the **external application password**.
 
-The rclone wizard stores an obfuscated password, not an independently
-encrypted secret; protect the entire file. Also configure the URL
+By default the rclone wizard stores an obfuscated WebDAV password; protect
+the entire file. You may additionally encrypt the configuration using the
+wizard’s configuration password option. Also configure the URL
 `https://webdav.cloud.mail.ru` rather than the normal web UI URL.
 
 ```bash
 sudo chmod 0600 /etc/immich-mailru/rclone.conf
 sudo rclone --config /etc/immich-mailru/rclone.conf lsd mailru:
 ```
+
+For an encrypted `rclone.conf`, the command above prompts for the **config
+encryption password**, separate from the Mail.ru application password and
+Restic encryption password. `sudo immich-setup` detects encryption and asks
+whether to save this password in `/etc/immich-mailru/rclone-config-password`
+(root-only, mode `0600`). It validates decryption before saving; existing
+password files are never overwritten. The daily service and
+`restic-immich-mailru` wrapper use rclone's `password-command` to read it.
+The config remains encrypted. This permits unattended backups, but root can
+read both files; it does not protect against a compromised host. Keep a
+separate safe copy of the config password and never send it in chat or Git.
+Without this file an encrypted config cannot be used by the daily service.
+If you later change the config password, update the private password file
+locally as root too. Do not replace `restic-password`.
+
+The setup wizard distinguishes a local config/decryption failure from a
+remote listing failure. The latter can mean an incorrect remote name,
+WebDAV credentials, URL or network problem; it does not prove a Mail.ru outage.
+To diagnose interactively, rerun the read-only `rclone lsd` command above;
+its output can contain private folder names, so do not publish it unredacted.
 
 First confirm that the expected cloud folders are visible. Do not use
 `rclone sync`, `delete`, `purge` or `move` on the original cloud folders.

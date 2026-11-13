@@ -52,12 +52,47 @@ def api(path, method="GET", body=None, token=None, key=None):
         raise SetupError(f"{method} {path.split('?')[0]}: API unavailable") from None
 
 
-def run(args, timeout=15):
+def run(args, timeout=15, env=None):
     try:
         return subprocess.run(args, timeout=timeout, stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL).returncode == 0
+                              stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                              env=env).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
+
+
+def cloud_environment():
+    # This password unlocks rclone.conf, not WebDAV or the Restic repository.
+    env = os.environ.copy()
+    env.pop("RCLONE_CONFIG_PASS", None)
+    env["RCLONE_ASK_PASSWORD"] = "false"
+    env["RCLONE_PASSWORD_COMMAND"] = "cat " + str(CLOUD / "rclone-config-password")
+    return env
+
+
+def prepare_cloud():
+    conf = CLOUD / "rclone.conf"
+    with conf.open("rb") as src:
+        encrypted = any(line.startswith(b"RCLONE_ENCRYPT_V") for line in src)
+    env = cloud_environment()
+    if encrypted and not (CLOUD / "rclone-config-password").exists():
+        print("rclone.conf зашифрован. Для ежедневного бэкапа нужен пароль его расшифровки.")
+        if not ask("Сохранить его локально в root-only файле rclone-config-password?"):
+            print("Пароль не сохранён; автоматический бэкап не настроен.")
+            return None
+        value = password("Пароль шифрования rclone.conf (не Mail.ru и не Restic): ")
+        trial = env.copy()
+        trial.pop("RCLONE_PASSWORD_COMMAND", None)
+        trial["RCLONE_CONFIG_PASS"] = value
+        if not run(["rclone", "--config", str(conf), "listremotes"], env=trial):
+            print("Не удалось открыть rclone.conf; проверьте пароль шифрования. Бэкап не запускаю.")
+            return None
+        secret_write(CLOUD / "rclone-config-password", value)
+        del value, trial
+    if not run(["rclone", "--config", str(conf), "listremotes"], env=env):
+        print("Не удалось открыть rclone.conf; проверьте файл и пароль шифрования. Бэкап не запускаю.")
+        return None
+    return env
 
 
 def ask(prompt):
@@ -265,8 +300,12 @@ def setup():
             subprocess.run(["rclone", "config", "--config", str(CLOUD / "rclone.conf")], check=True)
             os.chmod(CLOUD / "rclone.conf", 0o600)
         if (CLOUD / "rclone.conf").exists():
-            if not run(["rclone", "--config", str(CLOUD / "rclone.conf"), "lsd", "mailru:"], 60):
-                print("Mail.ru не отвечает; проверьте rclone.conf. Бэкап не запускаю.")
+            cloud_env = prepare_cloud()
+            if cloud_env is None:
+                pass
+            elif not run(["rclone", "--config", str(CLOUD / "rclone.conf"), "lsd", "mailru:"], 60,
+                         env=cloud_env):
+                print("Не удалось прочитать mailru:; проверьте имя remote, WebDAV URL, пароль приложения и сеть. Бэкап не запускаю.")
             else:
                 if not (CLOUD / "restic-password").exists():
                     secret_write(CLOUD / "restic-password", secrets.token_urlsafe(48))

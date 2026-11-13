@@ -18,6 +18,12 @@ in
     repository = "rclone:mailru:ImmichBackups/restic";
     passwordFile = "${secretsDir}/restic-password";
     rcloneConfigFile = "${secretsDir}/rclone.conf";
+    # Applied to both the timer and the generated restic CLI wrapper.
+    # The password command is only needed for an encrypted rclone config.
+    rcloneOptions = {
+      ask_password = "false";
+      password_command = "${pkgs.coreutils}/bin/cat ${secretsDir}/rclone-config-password";
+    };
     initialize = true;
 
     paths = [ mediaPath databaseDump ];

@@ -40,10 +40,12 @@ in
     };
   };
   system.extraDependencies = [
-    (pkgs.runCommand "immich-operator-test" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+    (pkgs.runCommand "immich-operator-test" { nativeBuildInputs = [ pkgs.python3 pkgs.rclone pkgs.coreutils ]; } ''
       cp ${./scripts/immich-operator.py} "$TMPDIR/immich-operator.py"
       python3 -m py_compile "$TMPDIR/immich-operator.py"
       python3 ${./scripts/immich-operator.py} self-test
+      cp ${./scripts/test-immich-cloud.py} "$TMPDIR/test-immich-cloud.py"
+      python3 "$TMPDIR/test-immich-cloud.py"
       touch "$out"
     '')
   ];
