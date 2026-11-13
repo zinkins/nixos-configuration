@@ -15,6 +15,10 @@ let
       exit 1
     fi
     ${pkgs.coreutils}/bin/install -d -m 000 -o root -g root ${mount}
+    if [ -n "$(${pkgs.findutils}/bin/find ${mount} -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+      echo "Archive mountpoint is not empty; refusing to hide existing files." >&2
+      exit 1
+    fi
     ${pkgs.coreutils}/bin/install -d -m 0700 -o root -g root ${cache}
     export RCLONE_ASK_PASSWORD=false
     export RCLONE_PASSWORD_COMMAND="${pkgs.coreutils}/bin/cat ${cloud}/rclone-config-password"
@@ -35,6 +39,7 @@ in {
   systemd.services.immich-family-archive = {
     description = "Read-only Mail.ru family archive for Immich";
     wantedBy = [ "multi-user.target" ];
+    path = [ pkgs.fuse3 ];
     wants = [ "network-online.target" ];
     after = [ "network-online.target" "zfs-mount.service" ];
     unitConfig = {

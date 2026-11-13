@@ -189,14 +189,18 @@ rescan or remove the library while the cloud is unreachable. The operator
 state is under `/var/lib/immich-operator`; do not delete it to force a retry.
 Check `systemctl status immich-family-archive immich-archive-worker` and
 `journalctl -u immich-archive-worker`. For failed/partial initialization,
-review the actual library and queue in the Immich admin UI before retrying;
-automatic recovery of partially failed scans is intentionally not implemented.
+review the actual library and queue in the Immich admin UI before retrying.
+Run the wizard again and explicitly confirm a retry for the same archive and
+album. Automatic retry of a partially failed scan is intentionally disabled.
 The initial import is not a recurring cloud-to-album sync.
 
 **Backup tradeoff:** the cloud-only originals have no independent second
 copy. Restic backs up managed phone originals and the database, not the
 WebDAV mount or cache. A restore requires reconnecting the identical remote
 folder at the identical mount path; do not move/rename/delete cloud files.
+Keep a separate secure copy of the local `archive-remote` setting and the
+completed `archive-state.json` (after temporary keys have been revoked) to
+restore the mount and avoid repeating initialization.
 Consider a separate offline copy of the historical archive for real disaster
 recovery. The cloud folder may be unavailable without Internet access.
 

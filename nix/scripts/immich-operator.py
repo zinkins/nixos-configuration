@@ -197,7 +197,7 @@ def doctor():
             data["archive"] = "WebDAV недоступен"
         elif phase == "complete":
             data["archive"] = "Подключён · " + str(archive["count"]) + " файлов"
-        elif phase == "review":
+        elif phase in ("review", "preparing"):
             data["archive"] = "Требует проверки"
         else:
             data["archive"] = "Индексируется"
@@ -590,10 +590,15 @@ def configure_archive():
     if data and data.get("phase") in ("queued", "indexing", "adding"):
         print("Семейный архив: первоначальная индексация/добавление выполняется в фоне.")
         return
-    if data and data.get("phase") == "review":
-        print("Архив требует проверки: " + data.get("reason", "неполный индекс") +
+    if data and data.get("phase") in ("review", "preparing"):
+        print("Архив требует проверки: " + data.get("reason", "незавершённая настройка") +
               ". Повторное сканирование автоматически не запускается.")
-        return
+        if not ask("После проверки запустить повторную первоначальную индексацию?"):
+            return
+        # Explicit retry only, same selected cloud folder and album.
+        # Revoke any temporary keys from the interrupted attempt first.
+        for field in ("ownerKey", "adminKey"):
+            archive_revoke(data, field)
     if not (CLOUD / "rclone.conf").is_file():
         return
     if not ask("Подключить старый семейный архив Mail.ru напрямую, без копирования оригиналов?"):
@@ -606,6 +611,10 @@ def configure_archive():
     family = existing_family(users, selection)
     if not family:
         raise SetupError("Сначала настройте общий семейный альбом.")
+    if data and any(data.get(k) != family[k] for k in ("owner", "editor")):
+        raise SetupError("Выбран другой состав семейного альбома; настройка остановлена.")
+    if data and data.get("album") != family["id"]:
+        raise SetupError("Выбран другой альбом; настройка остановлена.")
     remote_file = STATE / "archive-remote"
     if remote_file.exists():
         remote = remote_file.read_text().strip()
@@ -660,7 +669,8 @@ def configure_archive():
             raise SetupError("Очередь внешних библиотек занята или приостановлена.")
         data = {"phase": "preparing", "library": library["id"], "album": family["id"],
                 "owner": family["owner"], "editor": family["editor"], "expected": expected,
-                "previousRefresh": library["refreshedAt"], "failed": q["statistics"]["failed"]}
+                "previousRefresh": library["refreshedAt"], "failed": q["statistics"]["failed"],
+                "queuedAt": int(time.time())}
         save_archive(data)
         data["adminKey"] = archive_key(admin_token, "nixos-archive-index-check", ["library.read", "queue.read"])
         save_archive(data)
@@ -685,7 +695,7 @@ def archive_worker():
     data = archive_state()
     if not data:
         return
-    if data["phase"] == "complete":
+    if data["phase"] in ("complete", "review"):
         for field in ("ownerKey", "adminKey"):
             archive_revoke(data, field)
         return
@@ -708,6 +718,9 @@ def archive_worker():
         save_archive(data)
         return
     if not library["refreshedAt"] or library["refreshedAt"] == data["previousRefresh"]:
+        if time.time() - data.get("queuedAt", time.time()) > 600:
+            data.update(phase="review", reason="Очередь пуста, но сканирование не завершилось.")
+            save_archive(data)
         return
     rows = archive_rows(data["library"], data["album"])
     missing, unexpected, pending = archive_plan(data["expected"], rows)
