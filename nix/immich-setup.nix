@@ -5,6 +5,7 @@ let
     runtimeInputs = [ config.services.postgresql.package pkgs.python3 pkgs.rclone pkgs.systemd pkgs.util-linux pkgs.coreutils pkgs.dnsutils config.services.fail2ban.package ];
     text = ''
       export IMMICH_OPERATOR_DB=${lib.escapeShellArg config.services.immich.database.name}
+      export IMMICH_OPERATOR_PSQL=${config.services.postgresql.package}/bin/psql
       exec python3 ${./scripts/immich-operator.py} setup "$@"
     '';
   };

@@ -216,8 +216,9 @@ def inventory():
     """
     try:
         raw = subprocess.check_output(
-            ["runuser", "-u", "postgres", "--", "psql", "-X", "-qAt",
-             "-v", "ON_ERROR_STOP=1", "--dbname", os.environ["IMMICH_OPERATOR_DB"],
+            ["runuser", "-u", "postgres", "--", os.environ["IMMICH_OPERATOR_PSQL"], "-X", "-qAt",
+             "-v", "ON_ERROR_STOP=1", "--host=/run/postgresql", "--username=postgres",
+             "--dbname", os.environ["IMMICH_OPERATOR_DB"],
              "-c", "BEGIN READ ONLY; " + sql + " COMMIT;"],
             stderr=subprocess.DEVNULL, timeout=20, text=True,
             env={**os.environ, "PGOPTIONS": "-c default_transaction_read_only=on"},
@@ -304,8 +305,13 @@ def stats_key_valid():
     try:
         api("/server/statistics", key=KEY.read_text().strip())
         return True
-    except (SetupError, OSError):
-        return False
+    except SetupError as e:
+        # Do not rotate a working key on transient API/network/server failures.
+        if str(e).endswith(("HTTP 401", "HTTP 403")):
+            return False
+        raise
+    except OSError:
+        raise SetupError("Не удалось прочитать существующий ключ статистики.") from None
 
 
 def configure_accounts(initialized):

@@ -36,6 +36,40 @@ with tempfile.TemporaryDirectory() as tmp:
         assert op.read_selection() == {"album": "family", "owner": "one", "editor": "two", "admin": "admin"}
         op.configure_accounts(True)  # Repeated run.
         assert (op.STATE / "family-selection.json").stat().st_mode & 0o777 == 0o600
+    # Only an unfinished external domain requires an admin login, never
+    # the ordinary account passwords, and the album must not be modified.
+    calls = []
+    def repair_api(path, *args, **kwargs):
+        calls.append((path, args))
+        if path == "/server/config":
+            return {"externalDomain": ""}
+        if path == "/server/statistics":
+            return {}
+        if path == "/auth/login":
+            assert args[1]["email"] == "admin@example.invalid"
+            return {"accessToken": "synthetic-session", "isAdmin": True, "userId": "admin"}
+        if path == "/system-config":
+            if args:
+                assert args[0] == "PUT" and args[1]["server"]["externalDomain"] == op.SHARE
+                return {}
+            return {"server": {"externalDomain": ""}}
+        if path == "/auth/logout":
+            return {}
+        raise AssertionError(path)
+    with patch.object(op, "inventory", return_value=data), \
+         patch.object(op, "api", side_effect=repair_api), \
+         patch("builtins.input", side_effect=AssertionError("Unexpected input")), \
+         patch.object(op, "password", return_value="synthetic-password") as pw:
+        op.configure_accounts(True)
+        pw.assert_called_once()
+        assert not any(path.startswith("/albums") for path, args in calls)
+    with patch.object(op, "api", side_effect=op.SetupError("GET /server/statistics: HTTP 503")):
+        try:
+            op.stats_key_valid()
+        except op.SetupError:
+            pass
+        else:
+            raise AssertionError("Transient API errors must not rotate keys")
     assert op.existing_family(data, {"album": "deleted", "owner": "one", "editor": "two"}) is None
     assert op.existing_family({**data, "albums": []}, {}) is None
     assert op.existing_family({**data, "users": data["users"] + [
