@@ -11,6 +11,11 @@
       ./packages.nix
       ./networking.nix
       ./media.nix
+      ./immich.nix
+      ./immich-public-proxy.nix
+      ./immich-remote.nix
+      ./immich-mailru-backup.nix
+      ./immich-setup.nix
       ./adguard.nix
       ./reverse-proxy.nix
       ./homepage.nix

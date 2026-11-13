@@ -80,6 +80,49 @@ already-running Codex or Herdr process may need restarting to use the upgraded
 binary. Herdr's separate daily detection-manifest refresh is configured in
 [`HERDR.md`](HERDR.md); it is not the application version updater.
 
+## Immich release updates
+
+`.github/workflows/immich-update.yml` (**Update Immich**) runs every Sunday
+at **04:41 UTC** and supports manual execution under **Actions → Update Immich
+→ Run workflow**.
+
+1. Evaluates the currently pinned Immich package version.
+2. Updates **only** `immich-nixpkgs` in `flake.lock`; refuses changes to other
+   pinned sources. If the Immich application version is unchanged, the updater
+   leaves the lock alone to avoid weekly dependency churn.
+3. Rejects downgrades and unexpected version formats. Classifies version
+   updates as patch (same major/minor), minor, or major.
+4. Runs `nix flake check` and builds the full NixOS system before creating
+   a PR against `master` on `automation/update-immich`. The normal required
+   **Validate** check must then pass as well.
+5. **Default: manual merge for every Immich update.** A patch release can
+   optionally auto-merge after required checks if repository Actions variable
+   `IMMICH_AUTO_MERGE_PATCH` is set to `true`. Minor/major updates **never**
+   auto-merge. Deployment follows the existing 15-minute Git sync timer only
+   after a PR merges.
+
+The workflow uses the existing `AUTO_UPDATE_TOKEN` secret, with the same
+permissions described below. If it is missing, the workflow fails closed.
+The automated patch option is intentionally **off by default** because
+Immich updates can change the PostgreSQL schema, including patch updates.
+A successful system build, automatic Git revert, or NixOS rollback does **not**
+roll back an application database migration. Before opting in, configure,
+verify and periodically restore-test an independent backup of both the Immich
+database and `/myraid1/nas/Photos`. The optional Mail.ru Cloud backup service
+and its first-run requirements are documented in
+[`IMMICH-MAILRU-BACKUP.md`](IMMICH-MAILRU-BACKUP.md); deploying the module
+alone does not mean a working backup exists.
+
+To opt in **only after verified backups exist**, go to GitHub repository
+**Settings → Secrets and variables → Actions → Variables → New repository
+variable**, set name `IMMICH_AUTO_MERGE_PATCH`, value `true`. Set it to
+`false` or delete it to disable automatic patch merges. This option never
+silently enables automatic minor or major upgrades.
+
+This updates Immich **when it reaches the pinned `nixos-unstable` packaging
+channel**. It does not pull releases directly from GitHub, force unsafe
+version overrides, or upgrade the stable host package set.
+
 ### One-time GitHub authorization (required)
 
 GitHub currently requires a successful `Validate` check **from GitHub

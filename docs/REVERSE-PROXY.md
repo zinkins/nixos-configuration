@@ -6,13 +6,23 @@ The server provides friendly LAN URLs through Caddy:
 - `http://prowlarr.home`
 - `http://qbittorrent.home`
 - `http://jellyfin.home`
+- `http://photos.home` — private Immich UI for uploads and accounts (LAN/VPN)
+- `https://photos.zinkin.me` — public HTTPS photo-sharing links through Immich Public Proxy only
+- `https://immich.zinkin.me` — authenticated mobile/desktop access, enabled after local admin setup
 - `http://adguard.home`
 
 `nixos.home` is also published in local DNS as the server name.
 
 The electronic diary tile on `family.home` shows a locally saved timetable and homework. Clicking it opens `https://school.nso.ru/journal-app/`. See `SCHOOL-DIARY.md` for one-click updates from Yandex Browser and the data stored on the server.
 
-Use the explicit `http://` scheme. This LAN setup intentionally does not enable HTTPS, avoiding local CA/certificate installation and compatibility problems with older devices.
+Use explicit `http://` for the local `.home` sites. They intentionally remain
+HTTP-only for older LAN devices. Two separate public HTTPS vhosts share
+port 443 with Caddy-managed ACME certificates: `photos.zinkin.me` routes
+only to Immich Public Proxy on localhost:3125; `immich.zinkin.me` routes
+to the authenticated Immich API on localhost:2283 only after the local
+activation marker is created. No external access to `.home` sites or
+other dashboards is intended.
+See `IMMICH.md` for DNS, router NAT, and operational requirements.
 
 ## DNS architecture
 
@@ -23,14 +33,14 @@ LAN client
    v
 AdGuard Home
    |
-   +-- *.home --> dnsmasq 127.0.0.1:5353 --> server LAN IPv4
+   +-- *.home / immich.zinkin.me / photos.zinkin.me --> dnsmasq 127.0.0.1:5353 --> server LAN IPv4
    |
    +-- public DNS --> Quad9 over DNS-over-TLS
 ```
 
 AdGuard Home is the only DNS endpoint exposed to LAN clients. `dnsmasq` is loopback-only and exists solely for the private `.home` zone.
 
-The `.home` records are generated from the IPv4 interface carrying the server's default route, so the LAN IP is not hard-coded in Git.
+The `.home` records and split-DNS records for the two Immich HTTPS hosts are generated from the IPv4 interface carrying the server's default route, so the LAN IP is not hard-coded in Git.
 
 Unknown `.home` names remain local and are not sent to public DNS.
 
@@ -54,6 +64,7 @@ From a LAN client:
 nslookup prowlarr.home
 nslookup qbittorrent.home
 nslookup jellyfin.home
+nslookup photos.home
 nslookup adguard.home
 ```
 
@@ -85,16 +96,18 @@ Test the virtual hosts locally:
 curl -I -H 'Host: prowlarr.home' http://127.0.0.1/
 curl -I -H 'Host: qbittorrent.home' http://127.0.0.1/
 curl -I -H 'Host: jellyfin.home' http://127.0.0.1/
+curl -I -H 'Host: photos.home' http://127.0.0.1/
 curl -I -H 'Host: adguard.home' http://127.0.0.1/
 ```
 
-Caddy listens on TCP port 80.
+Caddy listens on TCP 80 for LAN-only .home websites and TCP 443 for public HTTPS photo sharing and authenticated mobile uploads. Only TCP 443 should be forwarded from the WAN by the router.
 
 ## Firewall / exposure
 
 ```text
 53 TCP/UDP   AdGuard Home DNS       LAN-facing
-80 TCP       Caddy                  LAN-facing
+80 TCP       Caddy                  LAN-facing; do NOT forward from WAN
+443 TCP      Caddy public HTTPS     WAN port-forward for photos.zinkin.me and immich.zinkin.me
 49160 TCP/UDP qBittorrent peers    Internet/LAN as required for torrenting
 139,445 TCP  Samba SMB              open; Samba accepts only 192.168.0.0/16
 137,138 UDP  Samba NetBIOS names    LAN-facing
@@ -104,6 +117,8 @@ Caddy listens on TCP port 80.
 8191         Byparr API             loopback only
 9696         Prowlarr Web UI        not directly opened to LAN
 8080         qBittorrent Web UI     not directly opened to LAN
+2283         Immich photo API      loopback only (Caddy: photos.home / immich.zinkin.me)
+3125         Immich Public Proxy   local service behind Caddy; no direct LAN/WAN port
 8084         School diary cache     loopback only
 ```
 
@@ -119,7 +134,7 @@ Our upstream ISP blocks direct connections to `api.open-meteo.com`'s IP (`157.90
 
 Prowlarr can send selected indexer requests through the localhost SOCKS5 service `127.0.0.1:1080`, which exits through AmneziaWG. Cloudflare-protected indexers can additionally use Byparr at `127.0.0.1:8191`; Byparr's browser is itself forced through the same SOCKS5 endpoint.
 
-See `MEDIA-SETUP.md` and `BYPARR.md`.
+See `MEDIA-SETUP.md` and `BYPARR.md`. Immich setup, storage and privacy are documented in `IMMICH.md`.
 
 ## AI CLI traffic
 
@@ -142,6 +157,7 @@ interface-name=nixos.home,<LAN_INTERFACE>/4
 interface-name=prowlarr.home,<LAN_INTERFACE>/4
 interface-name=qbittorrent.home,<LAN_INTERFACE>/4
 interface-name=jellyfin.home,<LAN_INTERFACE>/4
+interface-name=photos.home,<LAN_INTERFACE>/4
 interface-name=adguard.home,<LAN_INTERFACE>/4
 ```
 

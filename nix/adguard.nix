@@ -67,6 +67,10 @@ interface-name=family.${localDomain},$lan_if/4
 interface-name=prowlarr.${localDomain},$lan_if/4
 interface-name=qbittorrent.${localDomain},$lan_if/4
 interface-name=jellyfin.${localDomain},$lan_if/4
+interface-name=photos.${localDomain},$lan_if/4
+# Split DNS for the same trusted HTTPS names on Wi-Fi and cellular.
+interface-name=immich.zinkin.me,$lan_if/4
+interface-name=photos.zinkin.me,$lan_if/4
 interface-name=adguard.${localDomain},$lan_if/4
 EOF
     '';
@@ -106,6 +110,7 @@ EOF
         # .home stays entirely local; all other DNS uses encrypted Quad9.
         upstream_dns = [
           "[/${localDomain}/]127.0.0.1:5353"
+          "[/immich.zinkin.me/photos.zinkin.me/]127.0.0.1:5353"
           "tls://dns.quad9.net"
         ];
         bootstrap_dns = [
