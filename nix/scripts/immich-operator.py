@@ -1,5 +1,6 @@
 """Root-only setup and privacy-safe status for the native Immich service."""
 import datetime
+import fcntl
 import getpass
 import json
 import os
@@ -189,6 +190,17 @@ def doctor():
             data["backup"] = "Выполняется"
         elif run(["systemctl", "is-failed", "--quiet", "restic-backups-immich-mailru.service"]):
             data["backup"] = "Ошибка последнего запуска"
+    archive = archive_state()
+    if archive:
+        phase = archive["phase"]
+        if not archive_mount_ready():
+            data["archive"] = "WebDAV недоступен"
+        elif phase == "complete":
+            data["archive"] = "Подключён · " + str(archive["count"]) + " файлов"
+        elif phase in ("review", "preparing"):
+            data["archive"] = "Требует проверки"
+        else:
+            data["archive"] = "Индексируется"
     atomic_status(data)
     print(json.dumps(data, ensure_ascii=False, indent=2))
 
@@ -457,6 +469,283 @@ def configure_accounts(initialized):
                     pass
 
 
+ARCHIVE_MOUNT = "/mnt/immich-family-archive"
+ARCHIVE_NAME = "Mail.ru external family archive"
+ARCHIVE_EXTENSIONS = set((".3fr .ari .arw .cap .cin .cr2 .cr3 .crw .dcr .dng .erf .fff .iiq .k25 .kdc .mrw .nef .nrw .orf .ori .pef .psd .raf .raw .rw2 .rwl .sr2 .srf .srw .x3f .avif .bmp .gif .jfif .jpeg .jpg .png .webp .heic .heif .hif .insp .jp2 .jpe .jxl .mpo .svg .tif .tiff .3gp .3gpp .avi .flv .insv .m2t .m2ts .m4v .mkv .mov .mp4 .mpe .mpeg .mpg .mts .mxf .ts .vob .webm .wmv").split())
+
+
+def archive_state():
+    try:
+        return json.loads((STATE / "archive-state.json").read_text())
+    except FileNotFoundError:
+        return None
+
+
+def save_archive(data):
+    fd, name = tempfile.mkstemp(dir=STATE)
+    try:
+        with os.fdopen(fd, "w") as out:
+            json.dump(data, out, ensure_ascii=False)
+        os.replace(name, STATE / "archive-state.json")
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+
+
+def archive_remote(value):
+    # Only a specific folder, never account root or the encrypted backup.
+    value = value.strip().strip("/")
+    if not value or any(x in ("", ".", "..") for x in value.split("/")) or any(c in value for c in "\r\n\0:"):
+        raise SetupError("Укажите конкретную папку внутри Mail.ru.")
+    if value.split("/")[0].casefold() == "immichbackups":
+        raise SetupError("Нельзя подключать каталог резервных копий.")
+    return "mailru:" + value
+
+
+def archive_manifest(remote, env):
+    try:
+        raw = subprocess.check_output(["rclone", "--config", str(CLOUD / "rclone.conf"),
+            "lsjson", "--recursive", "--files-only", remote], env=env,
+            stderr=subprocess.DEVNULL, timeout=300, text=True)
+        files = json.loads(raw)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        raise SetupError("Не удалось получить полный список файлов архива.") from None
+    result = []
+    for entry in files:
+        p = entry["Path"]
+        parts = p.split("/")
+        if any(x in ("", ".", "..") or x.startswith(".") or x.casefold() in
+               ("@eadir", "#recycle", "#snapshot") for x in parts):
+            continue
+        if Path(p).suffix.lower() in ARCHIVE_EXTENSIONS:
+            result.append(ARCHIVE_MOUNT + "/" + p)
+    return sorted(set(result))
+
+
+def archive_mount_ready():
+    return run(["systemctl", "is-active", "--quiet", "immich-family-archive.service"]) and run(
+        ["mountpoint", "-q", ARCHIVE_MOUNT])
+
+
+def archive_rows(library, album):
+    # UUID validation prevents interpolation of arbitrary SQL. Only read IDs,
+    # paths and membership, never write directly to Immich's database.
+    import uuid
+    library, album = str(uuid.UUID(library)), str(uuid.UUID(album))
+    sql = f"""SELECT COALESCE(json_agg(json_build_object(
+      'id', a.id, 'path', a."originalPath", 'member', aa."assetId" IS NOT NULL,
+      'visible', a.visibility != 'hidden'))
+      , '[]'::json) FROM public.asset a
+      LEFT JOIN public.album_asset aa ON aa."assetId" = a.id AND aa."albumId" = '{album}'
+      WHERE a."libraryId" = '{library}' AND a."deletedAt" IS NULL
+      AND NOT a."isOffline" AND a.status = 'active';"""
+    try:
+        raw = subprocess.check_output(["runuser", "-u", "postgres", "--",
+            os.environ["IMMICH_OPERATOR_PSQL"], "-X", "-qAt", "-v", "ON_ERROR_STOP=1",
+            "--host=/run/postgresql", "--username=postgres",
+            "--dbname", os.environ["IMMICH_OPERATOR_DB"], "-c", "BEGIN READ ONLY; " + sql + " COMMIT;"],
+            stderr=subprocess.DEVNULL, timeout=60, text=True,
+            env={**os.environ, "PGOPTIONS": "-c default_transaction_read_only=on"})
+        return json.loads(raw)
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        raise SetupError("Не удалось проверить индекс архива.") from None
+
+
+def archive_plan(expected, rows):
+    """Strict completeness: never treat a partial cloud crawl as success."""
+    found = {r["path"]: r for r in rows}
+    missing = set(expected) - set(found)
+    unexpected = set(found) - set(expected)
+    # Hidden Live Photo companion assets need not be added separately.
+    pending = [r["id"] for p, r in found.items()
+               if p in expected and r["visible"] and not r["member"]]
+    return missing, unexpected, pending
+
+
+def archive_key(token, label, permissions):
+    key = api("/api-keys", "POST", {"name": label, "permissions": permissions + ["apiKey.delete"]},
+              token=token)
+    return {"id": key["id"], "secret": key["secret"]}
+
+
+def archive_revoke(data, field):
+    key = data.get(field)
+    if not key:
+        return
+    try:
+        api("/api-keys/" + key["id"], "DELETE", key=key["secret"])
+    except SetupError as e:
+        # A revoked/expired key no longer needs cleanup. Other failures retry.
+        if not str(e).endswith(("HTTP 401", "HTTP 403", "HTTP 404")):
+            raise
+    data.pop(field, None)
+    save_archive(data)
+
+
+def configure_archive():
+    data = archive_state()
+    if data and data.get("phase") == "complete":
+        print("Семейный архив уже проиндексирован и добавлен в альбом. Пропускаю.")
+        return
+    if data and data.get("phase") in ("queued", "indexing", "adding"):
+        print("Семейный архив: первоначальная индексация/добавление выполняется в фоне.")
+        return
+    if data and data.get("phase") in ("review", "preparing"):
+        print("Архив требует проверки: " + data.get("reason", "незавершённая настройка") +
+              ". Повторное сканирование автоматически не запускается.")
+        if not ask("После проверки запустить повторную первоначальную индексацию?"):
+            return
+        # Explicit retry only, same selected cloud folder and album.
+        # Revoke any temporary keys from the interrupted attempt first.
+        for field in ("ownerKey", "adminKey"):
+            archive_revoke(data, field)
+    if not (CLOUD / "rclone.conf").is_file():
+        return
+    if not ask("Подключить старый семейный архив Mail.ru напрямую, без копирования оригиналов?"):
+        return
+    env = prepare_cloud()
+    if env is None:
+        return
+    selection = read_selection()
+    users = inventory()
+    family = existing_family(users, selection)
+    if not family:
+        raise SetupError("Сначала настройте общий семейный альбом.")
+    if data and any(data.get(k) != family[k] for k in ("owner", "editor")):
+        raise SetupError("Выбран другой состав семейного альбома; настройка остановлена.")
+    if data and data.get("album") != family["id"]:
+        raise SetupError("Выбран другой альбом; настройка остановлена.")
+    remote_file = STATE / "archive-remote"
+    if remote_file.exists():
+        remote = remote_file.read_text().strip()
+        # Validate persisted choice, never silently change an existing mount.
+        if not remote.startswith("mailru:") or archive_remote(remote[7:]) != remote:
+            raise SetupError("Некорректный путь существующего архива.")
+    else:
+        remote = archive_remote(input("Путь семейной папки в Mail.ru (от корня облака): "))
+    expected = archive_manifest(remote, env)
+    if not expected:
+        raise SetupError("В выбранной папке не найдено поддерживаемых фотографий или видео.")
+    print(f"Найдено медиафайлов: {len(expected)}. Альбом: {family['name']}.")
+    print("ВНИМАНИЕ: если альбом уже опубликован, добавленные фото станут видны по существующей ссылке.")
+    if not ask("Подтвердить добавление ВСЕХ найденных фото и видео в этот альбом?"):
+        return
+    if not remote_file.exists():
+        secret_write(remote_file, remote)
+    if not run(["systemctl", "start", "immich-family-archive.service"], timeout=110) or not archive_mount_ready():
+        raise SetupError("WebDAV-монтирование не готово. Проверьте immich-family-archive.service.")
+    admin = select_existing([u for u in users["users"] if u["isAdmin"]], selection.get("admin"), "Администратор")
+    owner = next(u for u in users["users"] if u["id"] == family["owner"])
+    admin_token = owner_token = None
+    try:
+        admin_token = login(admin["email"], password("Пароль администратора (однократное создание внешней библиотеки): "))["accessToken"]
+        owner_token = login(owner["email"], password("Пароль владельца альбома (однократное добавление архива): "))["accessToken"]
+        # Immich's scheduled scan/watch settings are global. Disable both
+        # before creating the library; never run a destructive full scan on
+        # an unreliable mount. Preserve all unrelated settings.
+        cfg = api("/system-config", token=admin_token)
+        if cfg["library"]["scan"]["enabled"] or cfg["library"]["watch"]["enabled"]:
+            if not ask("Отключить автоматическое сканирование и наблюдение ВСЕХ внешних библиотек Immich?"):
+                raise SetupError("Без отключения автоматических сканирований архив не подключаю.")
+            cfg["library"]["scan"]["enabled"] = False
+            cfg["library"]["watch"]["enabled"] = False
+            api("/system-config", "PUT", cfg, token=admin_token)
+        libraries = api("/libraries", token=admin_token)
+        matches = [l for l in libraries if ARCHIVE_MOUNT in l["importPaths"]]
+        if len(matches) > 1 or any(l["ownerId"] != family["owner"] or
+                l["importPaths"] != [ARCHIVE_MOUNT] for l in matches):
+            raise SetupError("Внешняя библиотека уже связана с другим владельцем или путём.")
+        if matches:
+            library = matches[0]
+        else:
+            library = api("/libraries", "POST", {"ownerId": family["owner"],
+                         "name": ARCHIVE_NAME, "importPaths": [ARCHIVE_MOUNT]}, token=admin_token)
+        validation = api("/libraries/" + library["id"] + "/validate", "POST",
+                         {"importPaths": [ARCHIVE_MOUNT]}, token=admin_token)
+        if not validation["importPaths"][0]["isValid"]:
+            raise SetupError("Immich не видит WebDAV в своём пространстве монтирования. Проверьте доступ.")
+        q = api("/queues/library", token=admin_token)
+        if q["isPaused"] or any(q["statistics"][k] for k in ("active", "waiting", "delayed", "paused")):
+            raise SetupError("Очередь внешних библиотек занята или приостановлена.")
+        data = {"phase": "preparing", "library": library["id"], "album": family["id"],
+                "owner": family["owner"], "editor": family["editor"], "expected": expected,
+                "previousRefresh": library["refreshedAt"], "failed": q["statistics"]["failed"],
+                "queuedAt": int(time.time())}
+        save_archive(data)
+        data["adminKey"] = archive_key(admin_token, "nixos-archive-index-check", ["library.read", "queue.read"])
+        save_archive(data)
+        data["ownerKey"] = archive_key(owner_token, "nixos-archive-album-add", ["albumAsset.create", "asset.share"])
+        save_archive(data)
+        # Persist before dispatch: never rescan automatically after an
+        # ambiguous network failure or reboot between dispatch and response.
+        data["phase"] = "queued"
+        save_archive(data)
+        api("/libraries/" + library["id"] + "/scan", "POST", token=admin_token)
+        print("Первичная индексация запущена. Добавление в альбом завершится автоматически.")
+    finally:
+        for token in (owner_token, admin_token):
+            if token:
+                try:
+                    api("/auth/logout", "POST", token=token)
+                except SetupError:
+                    pass
+
+
+def archive_worker():
+    data = archive_state()
+    if not data:
+        return
+    if data["phase"] in ("complete", "review"):
+        for field in ("ownerKey", "adminKey"):
+            archive_revoke(data, field)
+        return
+    if data["phase"] not in ("queued", "indexing", "adding"):
+        return
+    if not archive_mount_ready():
+        return
+    # Guard against changed selected album or sharing permissions mid-import.
+    family = existing_family(inventory(), {"album": data["album"], "owner": data["owner"], "editor": data["editor"]})
+    if not family:
+        data.update(phase="review", reason="Состав общего альбома изменился.")
+        save_archive(data)
+        return
+    q = api("/queues/library", key=data["adminKey"]["secret"])
+    if q["isPaused"] or any(q["statistics"][k] for k in ("active", "waiting", "delayed", "paused")):
+        return
+    library = api("/libraries/" + data["library"], key=data["adminKey"]["secret"])
+    if library["ownerId"] != data["owner"] or library["importPaths"] != [ARCHIVE_MOUNT]:
+        data.update(phase="review", reason="Изменились параметры внешней библиотеки.")
+        save_archive(data)
+        return
+    if not library["refreshedAt"] or library["refreshedAt"] == data["previousRefresh"]:
+        if time.time() - data.get("queuedAt", time.time()) > 600:
+            data.update(phase="review", reason="Очередь пуста, но сканирование не завершилось.")
+            save_archive(data)
+        return
+    rows = archive_rows(data["library"], data["album"])
+    missing, unexpected, pending = archive_plan(data["expected"], rows)
+    if missing or unexpected or q["statistics"]["failed"] > data["failed"]:
+        data.update(phase="review", reason=f"Не проиндексировано: {len(missing)}, лишних: {len(unexpected)}. Проверьте очередь Library.")
+        save_archive(data)
+        return
+    data["phase"] = "adding"
+    save_archive(data)
+    for offset in range(0, len(pending), 100):
+        ids = pending[offset:offset+100]
+        result = api("/albums/" + data["album"] + "/assets", "PUT", {"ids": ids},
+                     key=data["ownerKey"]["secret"])
+        if {x["id"] for x in result} != set(ids) or any(not x["success"] and x.get("error") != "duplicate" for x in result):
+            raise SetupError("Не удалось добавить часть фотографий; следующая проверка продолжит с отсутствующих.")
+    missing, unexpected, pending = archive_plan(data["expected"], archive_rows(data["library"], data["album"]))
+    if not missing and not unexpected and not pending:
+        data.update(phase="complete", count=len(data["expected"]))
+        data.pop("expected", None)
+        save_archive(data)
+        for field in ("ownerKey", "adminKey"):
+            archive_revoke(data, field)
+        print("Семейный архив добавлен в общий альбом.")
+
+
 def setup():
     if not sys.stdin.isatty():
         raise SetupError("Запустите мастер в интерактивном терминале.")
@@ -510,7 +799,8 @@ def setup():
             os.chmod(GATE, 0o644)
             print("Удалённый доступ включён; проверьте с мобильного интернета.")
     print("Настройте приложения на телефонах: " + MOBILE)
-    print("Импорт архива и публикация ссылки выполняются отдельно после проверки.")
+    configure_archive()
+    print("Публичные ссылки не создаются автоматически.")
     doctor()
 
 
@@ -522,8 +812,18 @@ def main():
         return
     if os.geteuid() != 0:
         raise SetupError("Используйте sudo.")
-    if sys.argv[1:] == ["setup"]:
-        setup()
+    if sys.argv[1:] in (["setup"], ["archive-worker"]):
+        STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with (STATE / "setup.lock").open("a") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                print("Мастер или обработчик архива уже выполняется.")
+                return
+            if sys.argv[1:] == ["setup"]:
+                setup()
+            else:
+                archive_worker()
     elif sys.argv[1:] == ["doctor"]:
         doctor()
     else:

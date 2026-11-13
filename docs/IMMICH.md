@@ -78,8 +78,13 @@ to Homepage; the report contains only aggregates and status. HTTPS checks
 are from the server's LAN, not proof of WAN reachability. The last successful
 backup time is recorded only after a successful backup/prune run; this is
 not proof of restorability. A stale report or backup is marked accordingly.
-The wizard does not yet mount or import archives, nor automatically
-restore-test cloud backups. For manual setup use the steps below.
+The wizard optionally mounts the chosen historical family archive read-only,
+creates an external library and queues its initial scan. A background worker
+checks completeness and adds the indexed assets to the selected shared album
+once. It does not create public links. Existing public links will expose the
+newly added assets, so the wizard asks for explicit confirmation. See
+IMMICH-MAILRU-BACKUP.md for cloud-only archive risks and recovery. Automated
+restore tests are not implemented. For manual setup use the steps below.
 
 
 1. Once this PR is merged and the normal automatic deployment has completed,

@@ -41,13 +41,12 @@ another original file just because of the album membership. Never exclude
 managed originals by album, filename, or supposed cloud presence: the database
 references their exact paths, and the old cloud folder can change or disappear.
 
-A separately managed **read-only external library** backed by a local copy of
-an immutable cloud archive could avoid storing the same historical originals
-in Restic. That would require a separate verified recovery procedure for the
-external files at the same paths, including version/hash verification and
-protection against cloud-side deletion. It is not enabled by this PR. Keep
-all managed originals in Restic unless that alternative is explicitly chosen
-and tested. The existing Mail.ru photo folders are not modified.
+The historical family archive uses a read-only external library mounted
+from Mail.ru. Its originals and VFS cache are outside the managed backup
+paths. Restic cannot restore cloud-only originals; reconnect the same remote
+folder at the same mount path, and keep an independent copy if possible.
+All managed originals still remain in Restic. The original Mail.ru folders
+are not modified.
 
 ## 1. Create a Mail.ru external-application password
 
@@ -158,64 +157,59 @@ The remote encrypted repository is **not** intended as a browsable photo
 gallery. Your existing Mail.ru folders remain browsable; Restic snapshots
 are for disaster recovery.
 
-## 4. One-time import of the existing Mail.ru photo archive
+## 4. Direct read-only family archive (recommended for the selected workflow)
 
-An alternative to copying the historical archive into managed storage is
-an External Library. A read-only rclone WebDAV mount can present cloud files
-as a local path, with bounded VFS caching, but it is not configured by the
-backup remote alone. A cloud outage or removed/moved source files may make
-external assets unavailable and a rescan can lose album/metadata associations.
-Do not automatically scan an unreliable remote mount. Test on a small
-separate folder first. For durable local access prefer a read-only local
-mirror on ZFS outside managed storage, with a verified independent cloud
-copy. The direct mount and initial import are **not implemented** by the
-setup wizard; they need an explicit mode selection, mount/permission tests,
-and a recovery plan. Do not treat cloud-only originals as independently
-backed up. See https://rclone.org/commands/rclone_mount/ and
-https://docs.immich.app/features/libraries/.
+Run `sudo immich-setup` after WebDAV and the shared album are ready.
+Select direct archive setup and enter the exact cloud folder path relative
+to the Mail.ru root. The wizard lists supported media and asks you to confirm
+adding **all** of them to the existing selected family album. If a public
+share link already exists, the added photos become visible to its recipients.
 
+The service mounts only that folder at `/mnt/immich-family-archive` with
+rclone WebDAV, read-only, using the existing root-only rclone configuration.
+The persistent VFS cache on ZFS is limited approximately to 20 GiB (not a
+hard quota; open files can exceed it). The mount is restarted on boot and
+does not block the managed Immich library or phone uploads on cloud failure.
+The source path is stored locally, never committed to Git.
 
-**Long-term workflow chosen:** use **two personal Immich accounts**, one per
-adult, with mobile auto-backup directly into each account via the authenticated
-HTTPS address `https://immich.zinkin.me` once explicitly enabled. Both can add
-selected items to a shared family album as **Editors**. One existing Mail.ru
-account is used for **encrypted backup of the entire Immich server**,
-including both users; there is no need for a second cloud account, and no
-recurring cloud-to-Immich importer is desired.
+The wizard creates an external library owned by the existing album owner,
+disables **global** scheduled external-library scans and filesystem watching
+with confirmation, and queues a single initial scan. A background worker
+waits for the library queue, verifies indexed paths against the original
+remote listing, then adds only matching visible assets not already in the
+album. It stores progress locally and revokes temporary narrowly scoped
+API keys on success. Repeated runs do not scan or add again. No original
+files are copied into managed Immich storage, and no originals are changed
+in Mail.ru. Hidden Live Photo video companions are not separate album entries.
 
-The Mail.ru folders are now treated as **historical sources for optional
-one-time import**, not the active source of new family photos. The exact
-remote folder paths and target account identifiers are not committed to Git:
-inspect them with `rclone lsd` after the WebDAV credentials have been
-configured.
+If the cloud is unavailable, the worker waits; a partial scan, duplicates
+deduplicated by Immich, or other path discrepancies can leave the status
+"requires review" instead of falsely reporting success. Do not run a full
+rescan or remove the library while the cloud is unreachable. The operator
+state is under `/var/lib/immich-operator`; do not delete it to force a retry.
+Check `systemctl status immich-family-archive immich-archive-worker` and
+`journalctl -u immich-archive-worker`. For failed/partial initialization,
+review the actual library and queue in the Immich admin UI before retrying.
+Run the wizard again and explicitly confirm a retry for the same archive and
+album. Automatic retry of a partially failed scan is intentionally disabled.
+The initial import is not a recurring cloud-to-album sync.
 
-Recommended initial import:
+**Backup tradeoff:** the cloud-only originals have no independent second
+copy. Restic backs up managed phone originals and the database, not the
+WebDAV mount or cache. A restore requires reconnecting the identical remote
+folder at the identical mount path; do not move/rename/delete cloud files.
+Keep a separate secure copy of the local `archive-remote` setting and the
+completed `archive-state.json` (after temporary keys have been revoked) to
+restore the mount and avoid repeating initialization.
+Consider a separate offline copy of the historical archive for real disaster
+recovery. The cloud folder may be unavailable without Internet access.
 
-1. After creating the intended personal accounts and shared family album,
-   download a **copy** of the historically curated family cloud folder
-   into a private staging directory **outside** the Immich-managed folder.
-   Use the Immich CLI and a target user's API key to import the selected
-   files, optionally assigning them to the shared album.
-2. Consider a **separate** private-only import of any historical phone
-   uploads not already on the phone. Import with the same user's API key;
-   first test Immich's per-account deduplication and avoid reimporting the
-   same file under a second account.
-3. Verify photo counts, dates, videos and album membership before removing
-   any temporary staging copies. **Do not delete or modify the existing
-   Mail.ru cloud folders.** Leave the separate old NAS archive alone.
-
-Use `rclone copy` for non-destructive download, never `rclone sync`,
-`rclone move` or cloud deletion. Never copy raw images directly into
-`/myraid1/nas/Photos`, which Immich owns and manages.
-
-Continuing to move items between the old Mail.ru folders **does not update**
-Immich shared albums. In the new workflow, curated photos are shared
-**inside Immich**, directly from each owner's personal timeline, and
-the server's daily encrypted Restic backup captures them offsite.
-
-**No import has been performed in this PR.** Credentials, per-user API keys,
-private folder contents and upload actions are handled later after Immich
-and WebDAV are configured, using explicit user review.
+The separate incoming phone-upload folder can still be imported once into
+the appropriate private user via a non-destructive `rclone copy` to a
+private staging directory and Immich CLI, if needed. Never copy files directly
+into managed storage. Do not import the cloud family folder via CLI in this
+workflow, since this duplicates originals and Restic storage. Other NAS
+archives remain untouched.
 
 Official references:
 - https://help.mail.ru/cloud/desktop/webdav/
