@@ -1,9 +1,11 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 let
   tools = pkgs.writeShellApplication {
     name = "immich-setup";
-    runtimeInputs = [ pkgs.python3 pkgs.rclone pkgs.systemd pkgs.util-linux pkgs.coreutils pkgs.dnsutils config.services.fail2ban.package ];
+    runtimeInputs = [ config.services.postgresql.package pkgs.python3 pkgs.rclone pkgs.systemd pkgs.util-linux pkgs.coreutils pkgs.dnsutils config.services.fail2ban.package ];
     text = ''
+      export IMMICH_OPERATOR_DB=${lib.escapeShellArg config.services.immich.database.name}
+      export IMMICH_OPERATOR_PSQL=${config.services.postgresql.package}/bin/psql
       exec python3 ${./scripts/immich-operator.py} setup "$@"
     '';
   };
@@ -46,6 +48,8 @@ in
       python3 ${./scripts/immich-operator.py} self-test
       cp ${./scripts/test-immich-cloud.py} "$TMPDIR/test-immich-cloud.py"
       python3 "$TMPDIR/test-immich-cloud.py"
+      cp ${./scripts/test-immich-resume.py} "$TMPDIR/test-immich-resume.py"
+      python3 "$TMPDIR/test-immich-resume.py"
       touch "$out"
     '')
   ];
