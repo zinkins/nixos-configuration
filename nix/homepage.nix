@@ -394,6 +394,7 @@ in
                   { field = "backup"; label = "Бэкап"; }
                   { field = "lastBackup"; label = "Последний"; }
                   { field = "remote"; label = "HTTPS"; }
+                  { field = "archive"; label = "Семейный архив"; }
                 ];
               };
             };
