@@ -46,6 +46,15 @@ blocks. If deleted or overwritten files retain too much space, reduce the
 daily/weekly/monthly settings in a follow-up PR. Do not blindly destroy
 snapshots or roll back an entire dataset.
 
+## Dashboard
+
+The existing ZFS card on the local home dashboard shows the total snapshot
+count (manual and automatic) and space retained by snapshots across the
+entire pool, including descendants. It sums each filesystem/volume's
+`usedbysnapshots` property, not individual snapshot USED values. The
+read-only metrics refresh at most once per minute; an unavailable query
+is displayed as a dash, not zero.
+
 ## Recovery
 
 For an individual file, use the read-only

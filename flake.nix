@@ -21,6 +21,15 @@
       system = "x86_64-linux";
     in
     {
+      checks.${system}.zfs-status = nixpkgs.legacyPackages.${system}.runCommand "zfs-status-tests" {
+        nativeBuildInputs = [ nixpkgs.legacyPackages.${system}.python3 ];
+      } ''
+        export PYTHONDONTWRITEBYTECODE=1
+        export PYTHONPATH=${./nix/scripts}
+        python ${./nix/scripts/test-zfs-status.py}
+        touch "$out"
+      '';
+
       nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = { inherit inputs; };
