@@ -46,6 +46,7 @@ Preserve these unless the task explicitly changes the architecture:
 - [`docs/IMMICH-MAILRU-BACKUP.md`](docs/IMMICH-MAILRU-BACKUP.md)
 - [`docs/REVERSE-PROXY.md`](docs/REVERSE-PROXY.md)
 - [`docs/SAMBA.md`](docs/SAMBA.md)
+- [`docs/ZFS.md`](docs/ZFS.md)
 - [`docs/SCHOOL-DIARY.md`](docs/SCHOOL-DIARY.md)
 
 ## NixOS configuration index
@@ -53,6 +54,7 @@ Preserve these unless the task explicitly changes the architecture:
 - [`flake.nix`](flake.nix) — flake entry point.
 - [`nix/configuration.nix`](nix/configuration.nix) — main host module.
 - [`nix/hardware-configuration.nix`](nix/hardware-configuration.nix) — generated hardware baseline.
+- [`nix/zfs.nix`](nix/zfs.nix) — local ZFS snapshot policy.
 - [`nix/packages.nix`](nix/packages.nix)
 - [`nix/networking.nix`](nix/networking.nix)
 - [`nix/adguard.nix`](nix/adguard.nix)
