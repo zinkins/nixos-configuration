@@ -37,10 +37,13 @@ let
     }
   '';
 
+  zfsStatusModule = pkgs.writeTextDir "zfs_status.py" (builtins.readFile ./scripts/zfs_status.py);
+
   familyStatusApi = pkgs.writeText "family-status.py" ''
     import json
     import os
     import subprocess
+    import sys
     import threading
     import time
     from datetime import datetime
@@ -49,6 +52,20 @@ let
     IP = "${pkgs.iproute2}/bin/ip"
     CURL = "${pkgs.curl}/bin/curl"
     ZPOOL = "${pkgs.zfs}/bin/zpool"
+    ZFS = "${pkgs.zfs}/bin/zfs"
+    sys.path.insert(0, "${zfsStatusModule}")
+    from zfs_status import snapshot_status
+
+    SNAPSHOT_CACHE = {"payload": None, "expires": 0}
+    SNAPSHOT_LOCK = threading.Lock()
+
+    def cached_snapshot_status():
+        with SNAPSHOT_LOCK:
+            now = time.monotonic()
+            if now >= SNAPSHOT_CACHE["expires"]:
+                SNAPSHOT_CACHE["payload"] = snapshot_status(ZFS, "myraid1")
+                SNAPSHOT_CACHE["expires"] = time.monotonic() + 60
+            return SNAPSHOT_CACHE["payload"]
 
     # The same Open-Meteo URL/IP and transparent VPN route used by Homepage.
     # Fetch locally so CustomAPI's dynamic-list can display API-derived clock
@@ -162,12 +179,14 @@ let
     def zfs_status():
         output = run([ZPOOL, "list", "-H", "-o", "health,capacity", "myraid1"])
         if not output:
-            return {"zfs": "Недоступен", "zfsUsed": "—"}
+            return {"zfs": "Недоступен", "zfsUsed": "—",
+                    "zfsSnapshotCount": "—", "zfsSnapshotSpace": "—"}
 
         fields = output.split("\t")
         return {
             "zfs": fields[0] if fields else "Недоступен",
             "zfsUsed": fields[1] if len(fields) > 1 else "—",
+            **cached_snapshot_status(),
         }
 
     class Handler(BaseHTTPRequestHandler):
@@ -479,6 +498,16 @@ in
                   {
                     field = "zfsUsed";
                     label = "Пул занят";
+                  }
+                  {
+                    field = "zfsSnapshotCount";
+                    label = "Снапшоты";
+                    format = "text";
+                  }
+                  {
+                    field = "zfsSnapshotSpace";
+                    label = "Объём снапшотов";
+                    format = "text";
                   }
                 ];
               };
