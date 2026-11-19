@@ -245,3 +245,22 @@ Commit, stash, or remove any other local changes before starting the updater aga
 ## Security note
 
 An automatic `nixos-rebuild switch` runs configuration from `master` with root privileges. Treat write access to the GitHub repository and its `master` branch as administrative access to this server. The updater intentionally accepts only the configured repository, the `master` branch, and fast-forward history; it does not automatically resolve branch divergence or rewritten history.
+
+## Stable host Nixpkgs updates
+
+The `Update host Nixpkgs` workflow runs weekly (Wednesday 03:17 UTC) or
+manually from Actions on master. It uses the existing `AUTO_UPDATE_TOKEN`
+secret and updates only the stable host `nixpkgs` locked input. Independent
+Codex, Immich and Herdr pins are preserved. The updater checks the flake
+and builds the full NixOS system, including the selected kernel and ZFS
+and AmneziaWG modules, before opening or updating a PR. The required
+`Validate` PR check must also succeed.
+
+Host package PRs require manual merge; no auto-merge or automatic reboot
+is configured. Review changes and kernel/ZFS compatibility before merging.
+After the server applies the merged configuration, compare
+`readlink -f /run/booted-system/kernel` with
+`readlink -f /run/current-system/kernel`. If different, schedule a
+controlled reboot and verify ZFS, networking and services afterwards.
+CI confirms build compatibility, not runtime behavior. For urgent security
+updates, trigger the workflow manually instead of waiting for the schedule.
