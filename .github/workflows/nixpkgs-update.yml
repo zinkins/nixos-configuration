@@ -1,0 +1,98 @@
+name: Update host Nixpkgs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 3'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: host-nixpkgs-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Require a token that triggers pull_request checks
+        env:
+          AUTO_UPDATE_TOKEN: ${{ secrets.AUTO_UPDATE_TOKEN }}
+        run: |
+          if [ -z "$AUTO_UPDATE_TOKEN" ]; then
+            echo "::error::Add repository Actions secret AUTO_UPDATE_TOKEN (fine-grained GitHub PAT with Contents and Pull requests read/write)."
+            echo "::error::The default GITHUB_TOKEN cannot trigger the required Validate pull_request check for a bot-created PR."
+            exit 1
+          fi
+
+      - name: Checkout production configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Update only the stable host Nixpkgs input
+        id: update
+        run: |
+          set -euo pipefail
+          jq -S 'del(.nodes.nixpkgs.locked)' flake.lock > "$RUNNER_TEMP/other-inputs.json"
+          old_rev="$(jq -er '.nodes.nixpkgs.locked.rev' flake.lock)"
+          nix flake update nixpkgs
+          jq -S 'del(.nodes.nixpkgs.locked)' flake.lock | cmp "$RUNNER_TEMP/other-inputs.json" -
+          new_rev="$(jq -er '.nodes.nixpkgs.locked.rev' flake.lock)"
+          if git diff --quiet -- flake.lock; then
+            echo "Host Nixpkgs is already current."
+            exit 0
+          fi
+          if [ "$old_rev" = "$new_rev" ]; then
+            echo "::error::Unexpected lock change without revision change."
+            exit 1
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "old_rev=$old_rev" >> "$GITHUB_OUTPUT"
+          echo "new_rev=$new_rev" >> "$GITHUB_OUTPUT"
+
+      - name: Check flake
+        if: steps.update.outputs.changed == 'true'
+        run: bash .github/scripts/nix-retry.sh nix flake check --show-trace
+
+      - name: Build full NixOS system including kernel and modules
+        if: steps.update.outputs.changed == 'true'
+        run: bash .github/scripts/nix-retry.sh nix build .#nixosConfigurations.nixos.config.system.build.toplevel --no-link --print-build-logs
+
+      - name: Create or update host Nixpkgs PR
+        if: steps.update.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8
+        with:
+          token: ${{ secrets.AUTO_UPDATE_TOKEN }}
+          branch-token: ${{ secrets.AUTO_UPDATE_TOKEN }}
+          add-paths: flake.lock
+          branch: automation/update-host-nixpkgs
+          base: master
+          delete-branch: true
+          commit-message: 'chore(nixpkgs): update stable host package source'
+          title: 'chore(nixpkgs): update stable host package source'
+          body: |
+            Update the stable host Nixpkgs revision from
+            `${{ steps.update.outputs.old_rev }}` to
+            `${{ steps.update.outputs.new_rev }}`.
+
+            Only the host Nixpkgs locked source changes; independent Codex,
+            Herdr and Immich input pins are preserved. Packages that follow
+            the host pin may also change. Flake check and the full system
+            build succeeded, including configured kernel modules.
+
+            The separate required Validate check must pass before a manual
+            merge. Review kernel/ZFS compatibility and service changes.
+            A build is not a runtime test. No auto-merge or automatic reboot.
