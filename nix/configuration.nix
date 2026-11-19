@@ -41,8 +41,11 @@
   boot.supportedFilesystems = [ "zfs" ];
   boot.zfs.forceImportRoot = false;
   boot.zfs.extraPools = [ "myraid1" ];
+  # SCTP is not used by this host. Block alias-based and explicit modprobe loading.
+  boot.blacklistedKernelModules = [ "sctp" ];
   boot.extraModprobeConfig = ''
     options zfs zfs_arc_max=8589934592
+    install sctp ${pkgs.coreutils}/bin/false
   '';
 
   networking.hostName = "nixos"; # Define your hostname.
