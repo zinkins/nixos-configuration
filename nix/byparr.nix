@@ -1,7 +1,7 @@
 { config, pkgs, ... }:
 
 let
-  # The old anti-detect Firefox has a frozen built-in NSS CA store. Generate
+  # The anti-detect Firefox has a separate NSS CA store. Generate
   # an explicit negative-trust record for the compromised-chain root.
   # Firefox's cert9.db trust overrides are scoped to each browser profile.
   firefoxNssProfile = pkgs.runCommand "byparr-firefox-nss-distrust" {
@@ -28,9 +28,8 @@ in
     backend = "podman";
 
     containers.byparr = {
-      # GitHub releases use names like v3.0.4, but GHCR publishes the stable
-      # container tag without the leading "v" (3.0.4).
-      image = "ghcr.io/thephaseless/byparr:3.0.4";
+      # Upstream release v3.1.1; GHCR tags omit the leading "v".
+      image = "ghcr.io/thephaseless/byparr:3.1.1";
       autoStart = true;
 
       environment = {
@@ -38,6 +37,8 @@ in
         PORT = "8191";
         LOG_LEVEL = "INFO";
         PROXY_SERVER = "socks5://127.0.0.1:1080";
+        # Fail closed if the mandatory SOCKS proxy configuration disappears.
+        BYPARR_REQUIRE_PROXY = "1";
 
         # Python/OpenSSL, requests and httpx must use the NixOS trust store,
         # not the CA bundles frozen inside this older OCI image.
@@ -64,6 +65,8 @@ in
         "--network=host"
         "--shm-size=512m"
         "--security-opt=no-new-privileges"
+        "--cap-drop=ALL"
+        "--pids-limit=512"
       ];
     };
   };
