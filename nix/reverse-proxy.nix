@@ -1,4 +1,4 @@
-{ ... }:
+{ inputs, lib, pkgs, ... }:
 
 let
   localDomain = "home";
@@ -8,6 +8,15 @@ in
   # Separate public sharing and authenticated mobile HTTPS hosts use ACME.
   services.caddy = {
     enable = true;
+    # Stable nixpkgs currently lags behind upstream Caddy security fixes.
+    # The independently pinned Immich nixpkgs already supplies Caddy 2.11.9.
+    # CI validates this package together with the rest of the NixOS closure.
+    package =
+      let
+        securityCaddy = inputs.immich-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.caddy;
+      in
+      assert lib.versionAtLeast securityCaddy.version "2.11.9";
+      securityCaddy;
     httpPort = 80;
     httpsPort = 443;
 
