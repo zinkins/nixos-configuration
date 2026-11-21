@@ -173,3 +173,34 @@ From Windows:
 ```powershell
 Test-NetConnection <SERVER_IP> -Port 80
 ```
+
+
+## Caddy security package
+
+The stable host Nixpkgs currently packages Caddy 2.11.7. The service
+temporarily uses Caddy from the separately pinned `immich-nixpkgs` input,
+which supplies 2.11.9, including upstream security fixes. Its package is
+overridden to use the host's **explicit Go 1.27 builder**. The pinned Immich
+source defaults to vulnerable Go 1.27.3 and the stable host's default Go is
+also vulnerable (1.26.10); however, the host's `go_1_27` is patched Go
+1.27.4. The NixOS module asserts the Caddy version is at least 2.11.9
+and the explicit Go 1.27 compiler is at least 1.27.4.
+
+This is independent of the host kernel pin but **shares the Immich package
+source pin**; reviewing Immich pin updates should also consider any changes
+to the Caddy package. Full NixOS CI covers both services. The server's Caddy
+configuration, certificate state and routing stay unchanged.
+
+After deployment, verify the running binary and active HTTPS listeners:
+
+```bash
+caddy version
+# Verify the Go toolchain embedded in the deployed executable, not just `go version`.
+go version -m "$(readlink -f "$(command -v caddy)")"
+systemctl status caddy --no-pager
+curl -I https://photos.zinkin.me
+curl -I https://immich.zinkin.me
+```
+
+No reboot is required for this Caddy-only update. The public HTTPS endpoints
+must be tested from outside the LAN as well as locally.

@@ -1,4 +1,4 @@
-{ ... }:
+{ inputs, lib, pkgs, ... }:
 
 let
   localDomain = "home";
@@ -8,6 +8,21 @@ in
   # Separate public sharing and authenticated mobile HTTPS hosts use ACME.
   services.caddy = {
     enable = true;
+    # Stable nixpkgs currently lags behind upstream Caddy security fixes.
+    # Use Caddy 2.11.9 from the pinned Immich nixpkgs, but override its Go
+    # builder with host go_1_27 (1.27.4), which fixes CVE-2026-97054.
+    # Both the Immich default Go 1.27.3 and host default Go 1.26.10
+    # are vulnerable, so do NOT use buildGoLatestModule here.
+    package =
+      let
+        securityCaddy =
+          (inputs.immich-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.caddy).override {
+            buildGoLatestModule = pkgs.buildGo127Module;
+          };
+      in
+      assert lib.versionAtLeast securityCaddy.version "2.11.9";
+      assert lib.versionAtLeast pkgs.go_1_27.version "1.27.4";
+      securityCaddy;
     httpPort = 80;
     httpsPort = 443;
 
