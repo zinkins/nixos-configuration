@@ -179,9 +179,11 @@ Test-NetConnection <SERVER_IP> -Port 80
 
 The stable host Nixpkgs currently packages Caddy 2.11.7. The service
 temporarily uses Caddy from the separately pinned `immich-nixpkgs` input,
-which supplies 2.11.9, including upstream security fixes. The NixOS module
-asserts the package version is at least 2.11.9 so future pin updates cannot
-silently regress below the patched baseline.
+which supplies 2.11.9, including upstream security fixes. Its package is
+overridden to use the **stable host Go builder**: the pinned Immich source
+otherwise uses Go 1.27.3 affected by CVE-2026-97054, whereas the host
+nixpkgs provides fixed Go 1.27.4. The NixOS module asserts the Caddy version
+is at least 2.11.9 and the host Go version is at least 1.27.4.
 
 This is independent of the host kernel pin but **shares the Immich package
 source pin**; reviewing Immich pin updates should also consider any changes
@@ -192,6 +194,8 @@ After deployment, verify the running binary and active HTTPS listeners:
 
 ```bash
 caddy version
+# Verify the Go toolchain embedded in the deployed executable, not just `go version`.
+go version -m "$(readlink -f "$(command -v caddy)")"
 systemctl status caddy --no-pager
 curl -I https://photos.zinkin.me
 curl -I https://immich.zinkin.me
