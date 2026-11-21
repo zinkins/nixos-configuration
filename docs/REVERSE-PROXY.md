@@ -180,10 +180,11 @@ Test-NetConnection <SERVER_IP> -Port 80
 The stable host Nixpkgs currently packages Caddy 2.11.7. The service
 temporarily uses Caddy from the separately pinned `immich-nixpkgs` input,
 which supplies 2.11.9, including upstream security fixes. Its package is
-overridden to use the **stable host Go builder**: the pinned Immich source
-otherwise uses Go 1.27.3 affected by CVE-2026-97054, whereas the host
-nixpkgs provides fixed Go 1.27.4. The NixOS module asserts the Caddy version
-is at least 2.11.9 and the host Go version is at least 1.27.4.
+overridden to use the host's **explicit Go 1.27 builder**. The pinned Immich
+source defaults to vulnerable Go 1.27.3 and the stable host's default Go is
+also vulnerable (1.26.10); however, the host's `go_1_27` is patched Go
+1.27.4. The NixOS module asserts the Caddy version is at least 2.11.9
+and the explicit Go 1.27 compiler is at least 1.27.4.
 
 This is independent of the host kernel pin but **shares the Immich package
 source pin**; reviewing Immich pin updates should also consider any changes
