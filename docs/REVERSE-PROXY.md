@@ -173,3 +173,29 @@ From Windows:
 ```powershell
 Test-NetConnection <SERVER_IP> -Port 80
 ```
+
+
+## Caddy security package
+
+The stable host Nixpkgs currently packages Caddy 2.11.7. The service
+temporarily uses Caddy from the separately pinned `immich-nixpkgs` input,
+which supplies 2.11.9, including upstream security fixes. The NixOS module
+asserts the package version is at least 2.11.9 so future pin updates cannot
+silently regress below the patched baseline.
+
+This is independent of the host kernel pin but **shares the Immich package
+source pin**; reviewing Immich pin updates should also consider any changes
+to the Caddy package. Full NixOS CI covers both services. The server's Caddy
+configuration, certificate state and routing stay unchanged.
+
+After deployment, verify the running binary and active HTTPS listeners:
+
+```bash
+caddy version
+systemctl status caddy --no-pager
+curl -I https://photos.zinkin.me
+curl -I https://immich.zinkin.me
+```
+
+No reboot is required for this Caddy-only update. The public HTTPS endpoints
+must be tested from outside the LAN as well as locally.
