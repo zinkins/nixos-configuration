@@ -34,16 +34,16 @@ jobs:
           certutil -L -d sql:/tmp/byparr-nss-template
           sudo chmod -R a+rX /tmp/byparr-nss-template
 
-      - name: Run isolated upstream Byparr 3.0.4 with hardened profiles
+      - name: Run isolated upstream Byparr 3.1.1 with hardened profiles
         run: |
           set -euo pipefail
           docker run --pull=always --detach --name byparr-nss-ci \
             --network host --shm-size=512m \
-            --security-opt=no-new-privileges \
+            --security-opt=no-new-privileges --cap-drop=ALL --pids-limit=512 \
             -e HOST=127.0.0.1 -e PORT=18191 -e PROXY_SERVER= \
             -v "/tmp/byparr-nss-template:/etc/byparr-nss-profile:ro" \
             -v "$PWD/nix/byparr-firefox-utils.py:/app/src/utils.py:ro" \
-            ghcr.io/thephaseless/byparr:3.0.4
+            ghcr.io/thephaseless/byparr:3.1.1
           for _ in $(seq 1 50); do
             if curl -fsS --max-time 2 http://127.0.0.1:18191/openapi.json > /dev/null; then
               exit 0
@@ -52,6 +52,17 @@ jobs:
           done
           docker logs byparr-nss-ci
           exit 1
+
+      - name: Verify untrusted clients cannot override the VPN proxy
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --max-time 20 -o /tmp/override.json -w '%{http_code}' \
+            -H 'Content-Type: application/json' \
+            -H 'X-Proxy-Server: socks5://127.0.0.1:19999' \
+            -d '{"cmd":"request.get","url":"https://example.com/","maxTimeout":10000}' \
+            http://127.0.0.1:18191/v1)"
+          test "$status" = "403"
+          jq -e '.detail == "Per-request proxy overrides are disabled"' /tmp/override.json
 
       - name: Assert rejection inside the real Firefox engine
         run: |
