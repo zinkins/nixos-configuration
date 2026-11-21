@@ -5,10 +5,10 @@ Byparr runs locally on the NixOS host and provides a FlareSolverr-compatible API
 The container image is pinned to:
 
 ```text
-ghcr.io/thephaseless/byparr:3.0.4
+ghcr.io/thephaseless/byparr:3.1.1
 ```
 
-Important: the upstream Git release is named `v3.0.4`, but the GHCR container tag is `3.0.4` without the leading `v`. Using `:v3.0.4` fails with `manifest unknown`.
+Important: the upstream Git release is named `v3.1.1`, but the GHCR container tag is `3.1.1` without the leading `v`. Using `:v3.1.1` fails with `manifest unknown`.
 
 ## Network paths
 
@@ -59,6 +59,24 @@ PROXY_SERVER=socks5://127.0.0.1:1080
 ```
 
 The SOCKS endpoint is provided by `media-vpn-proxy`, whose outbound connections are bound to the AmneziaWG address. If that SOCKS endpoint is unavailable, the Byparr browser request fails instead of silently switching to the normal host route.
+
+The v3.1.1 browser-launch integration retains a freshly cloned Firefox NSS
+profile per request, including the explicit distrust certificate. Incoming
+`X-Proxy-Server`, `X-Proxy-Username`, and `X-Proxy-Password` headers are
+rejected with HTTP 403 rather than being allowed to override the configured
+SOCKS proxy. `BYPARR_REQUIRE_PROXY=1` prevents an unproxied browser launch
+if the configured proxy address is missing (the runtime still depends on the
+actual SOCKS listener, so verify it and routing through AmneziaWG).
+
+The rootful Podman container runs the application as UID 1000, with all Linux
+capabilities dropped, `no-new-privileges`, and a PID limit. It still uses
+host networking to reach the existing loopback-only SOCKS listener: that is
+**not** a network namespace security boundary. Host network isolation is a
+separate migration requiring a scoped SOCKS relay and an integration test.
+No LAN or WAN firewall port is added by this update.
+
+The pinned image is still tagged rather than locked to a registry digest,
+so this update does not provide digest-level image reproducibility.
 
 qBittorrent is not changed and continues to use the normal host route for peer traffic.
 
@@ -151,5 +169,10 @@ journalctl -u podman-byparr -n 200 --no-pager
 journalctl -u media-vpn-proxy -n 100 --no-pager
 journalctl -u prowlarr -n 200 --no-pager
 ```
+
+After deployment, verify that the running image is 3.1.1, `podman-byparr`
+is active, and Prowlarr's RuTracker proxy test succeeds. The GitHub Actions
+Firefox smoke test checks the real browser and NSS distrust; it cannot
+exercise the production VPN path. Test the actual VPN egress from the host.
 
 If RuTracker still returns Cloudflare `403` after both proxies are configured, inspect the Byparr log while pressing **Test** on the indexer. Cloudflare protections change over time, so challenge solving is not guaranteed indefinitely. The container image is pinned to a specific Byparr release so upgrades are deliberate.
