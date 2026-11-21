@@ -9,13 +9,18 @@ in
   services.caddy = {
     enable = true;
     # Stable nixpkgs currently lags behind upstream Caddy security fixes.
-    # The independently pinned Immich nixpkgs already supplies Caddy 2.11.9.
-    # CI validates this package together with the rest of the NixOS closure.
+    # Take Caddy 2.11.9 sources from the pinned Immich nixpkgs, but use the
+    # stable host Go builder: the Immich pin contains vulnerable Go 1.27.3,
+    # whereas host Go 1.27.4 fixes CVE-2026-97054.
     package =
       let
-        securityCaddy = inputs.immich-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.caddy;
+        securityCaddy =
+          (inputs.immich-nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.caddy).override {
+            buildGoLatestModule = pkgs.buildGoLatestModule;
+          };
       in
       assert lib.versionAtLeast securityCaddy.version "2.11.9";
+      assert lib.versionAtLeast pkgs.go.version "1.27.4";
       securityCaddy;
     httpPort = 80;
     httpsPort = 443;
