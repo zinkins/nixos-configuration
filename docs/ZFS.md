@@ -55,6 +55,14 @@ entire pool, including descendants. It sums each filesystem/volume's
 read-only metrics refresh at most once per minute; an unavailable query
 is displayed as a dash, not zero.
 
+The adjacent ZFS ARC card refreshes every 10 seconds and shows host-wide
+ARC size, effective maximum (c_max), and cumulative hit percentage
+(hits / (hits + misses), since the counters were initialized).
+RAM excluding ARC is an estimate: max(0, MemTotal - MemAvailable - ARC size),
+displayed alongside total RAM. Linux memory accounting and ARC reclaimability
+mean this is not an exact measure of application memory. Missing counters or
+no recorded requests are shown as a dash. ARC settings are not changed.
+
 ## Recovery
 
 For an individual file, use the read-only
