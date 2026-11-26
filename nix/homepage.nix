@@ -54,7 +54,7 @@ let
     ZPOOL = "${pkgs.zfs}/bin/zpool"
     ZFS = "${pkgs.zfs}/bin/zfs"
     sys.path.insert(0, "${zfsStatusModule}")
-    from zfs_status import snapshot_status
+    from zfs_status import snapshot_status, arc_status
 
     SNAPSHOT_CACHE = {"payload": None, "expires": 0}
     SNAPSHOT_LOCK = threading.Lock()
@@ -180,13 +180,15 @@ let
         output = run([ZPOOL, "list", "-H", "-o", "health,capacity", "myraid1"])
         if not output:
             return {"zfs": "Недоступен", "zfsUsed": "—",
-                    "zfsSnapshotCount": "—", "zfsSnapshotSpace": "—"}
+                    "zfsSnapshotCount": "—", "zfsSnapshotSpace": "—",
+                    **arc_status()}
 
         fields = output.split("\t")
         return {
             "zfs": fields[0] if fields else "Недоступен",
             "zfsUsed": fields[1] if len(fields) > 1 else "—",
             **cached_snapshot_status(),
+            **arc_status(),
         }
 
     class Handler(BaseHTTPRequestHandler):
@@ -507,6 +509,39 @@ in
                   {
                     field = "zfsSnapshotSpace";
                     label = "Объём снапшотов";
+                    format = "text";
+                  }
+                ];
+              };
+            };
+          }
+          {
+            "ZFS ARC" = {
+              icon = "mdi-memory";
+              description = "Кэш ZFS и память сервера";
+              widget = {
+                type = "customapi";
+                url = "http://127.0.0.1:${toString statusPort}/status";
+                refreshInterval = 10000;
+                mappings = [
+                  {
+                    field = "zfsArcSize";
+                    label = "ARC";
+                    format = "text";
+                  }
+                  {
+                    field = "zfsArcMax";
+                    label = "Макс. ARC";
+                    format = "text";
+                  }
+                  {
+                    field = "zfsArcHitRate";
+                    label = "Попадания";
+                    format = "text";
+                  }
+                  {
+                    field = "zfsRamWithoutArc";
+                    label = "ОЗУ без ARC (оценка)";
                     format = "text";
                   }
                 ];
